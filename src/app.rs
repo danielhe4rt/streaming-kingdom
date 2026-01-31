@@ -22,6 +22,11 @@ pub enum StreamEvent {
         amount_cents: u64,
         message: String,
     },
+    GiftSub {
+        username: String,
+        tier: SubTier,
+        total: u32,
+    },
     Cheer {
         username: String,
         bits: u64,
@@ -86,7 +91,7 @@ impl StreamStats {
     pub fn record(&mut self, event: &StreamEvent) {
         match event {
             StreamEvent::Follow { .. } => self.followers_today += 1,
-            StreamEvent::Sub { .. } => self.subs_today += 1,
+            StreamEvent::Sub { .. } | StreamEvent::GiftSub { .. } => self.subs_today += 1,
             StreamEvent::ViewerCountUpdate { count } => self.viewer_count = *count,
             _ => {}
         }

@@ -51,6 +51,16 @@ impl WaybarEvent {
                 })
             }
 
+            StreamEvent::GiftSub {
+                username,
+                total,
+                ..
+            } => Some(Self {
+                event_type: "giftSubscriber".into(),
+                username: username.clone(),
+                amount: Some(total.to_string()),
+            }),
+
             StreamEvent::Donation {
                 username,
                 amount_cents,

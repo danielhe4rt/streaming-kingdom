@@ -25,6 +25,15 @@ async fn main() -> io::Result<()> {
     let event_rx = app.subscribe_events();
     tokio::task::spawn_local(waybar::event_writer(event_rx));
 
+    // Start the Twitch EventSub WebSocket client (runs in background)
+    if !cfg.twitch.oauth_token.is_empty() && !cfg.twitch.client_id.is_empty() {
+        let twitch = stream::TwitchClient::new(cfg.twitch.clone(), app.event_tx.clone());
+        tokio::task::spawn_local(twitch.run());
+        tracing::info!("twitch EventSub client started");
+    } else {
+        tracing::warn!("twitch config incomplete — EventSub client not started");
+    }
+
     // Run the TUI with waybar process management
     tui::run(&mut app, &wb_config, &wb_style).await
 }

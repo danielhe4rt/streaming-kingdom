@@ -5,7 +5,7 @@ use std::{fs, io};
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
     pub obs: ObsConfig,
-    pub streamelements: StreamElementsConfig,
+    pub twitch: TwitchConfig,
     pub alerts: AlertsConfig,
     pub waybar: WaybarConfig,
     pub privacy: PrivacyConfig,
@@ -19,9 +19,12 @@ pub struct ObsConfig {
     pub capture_source: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct StreamElementsConfig {
-    pub jwt_token: String,
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TwitchConfig {
+    pub client_id: String,
+    pub oauth_token: String,
+    pub refresh_token: String,
+    pub broadcaster_user_id: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -49,8 +52,11 @@ impl Default for Config {
                 password: String::new(),
                 capture_source: "Screen Capture".into(),
             },
-            streamelements: StreamElementsConfig {
-                jwt_token: String::new(),
+            twitch: TwitchConfig {
+                client_id: String::new(),
+                oauth_token: String::new(),
+                refresh_token: String::new(),
+                broadcaster_user_id: String::new(),
             },
             alerts: AlertsConfig {
                 overlay_url: String::new(),

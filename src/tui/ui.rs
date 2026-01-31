@@ -146,6 +146,14 @@ fn format_event(event: &StreamEvent, base: std::time::Instant) -> Line<'static> 
             "★",
             format!("{username} subbed ({tier:?}, {months}mo)"),
         ),
+        StreamEvent::GiftSub {
+            username,
+            tier,
+            total,
+        } => (
+            "🎁",
+            format!("{username} gifted {total} subs ({tier:?})"),
+        ),
         StreamEvent::Donation {
             username,
             amount_cents,
