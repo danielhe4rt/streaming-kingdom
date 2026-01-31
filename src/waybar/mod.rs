@@ -1,17 +1,17 @@
-mod config;
+pub mod config;
 mod events;
 mod style;
 
 use std::path::PathBuf;
 use std::{fs, io};
 
-use tokio::process::{Child, Command};
+use tokio::process::Command;
 use tokio::sync::broadcast;
 
 use crate::app::StreamEvent;
 
 // ---------------------------------------------------------------------------
-// Cache directory layout
+// Cache directory layout (for stream_data.json — still used by event_writer)
 // ---------------------------------------------------------------------------
 
 fn cache_dir() -> io::Result<PathBuf> {
@@ -21,34 +21,15 @@ fn cache_dir() -> io::Result<PathBuf> {
     Ok(base.join("streams-toolkit"))
 }
 
-fn waybar_dir() -> io::Result<PathBuf> {
-    Ok(cache_dir()?.join("waybar"))
-}
-
 fn data_file_path() -> io::Result<PathBuf> {
     Ok(cache_dir()?.join("stream_data.json"))
 }
 
 // ---------------------------------------------------------------------------
-// Config / style file generation
+// Ensure the data file exists so waybar custom modules don't fail
 // ---------------------------------------------------------------------------
 
-/// Write waybar config and style files into the cache directory.
-/// Returns `(config_path, style_path)`.
-pub fn write_config_files(output: &str) -> io::Result<(PathBuf, PathBuf)> {
-    let dir = waybar_dir()?;
-    fs::create_dir_all(&dir)?;
-
-    let config_path = dir.join("config.jsonc");
-    let style_path = dir.join("style.css");
-
-    let config_json = config::generate(output);
-    fs::write(&config_path, config_json)?;
-
-    let style_css = style::generate();
-    fs::write(&style_path, style_css)?;
-
-    // Ensure the data file exists so waybar doesn't fail on first read
+pub fn ensure_data_file() -> io::Result<()> {
     let data_path = data_file_path()?;
     if !data_path.exists() {
         if let Some(parent) = data_path.parent() {
@@ -56,48 +37,65 @@ pub fn write_config_files(output: &str) -> io::Result<(PathBuf, PathBuf)> {
         }
         fs::write(&data_path, "[]")?;
     }
-
-    tracing::info!(
-        "wrote waybar config to {} and style to {}",
-        config_path.display(),
-        style_path.display()
-    );
-
-    Ok((config_path, style_path))
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
-// Process management
+// Toggle ON/OFF — merge config/style then restart Omarchy's waybar
 // ---------------------------------------------------------------------------
 
-/// Spawn a waybar instance with our generated config/style.
-pub fn spawn(config_path: &PathBuf, style_path: &PathBuf) -> io::Result<Child> {
-    let child = Command::new("waybar")
-        .arg("-c")
-        .arg(config_path)
-        .arg("-s")
-        .arg(style_path)
+/// Enable the stream bottom bar: merge config + style, restart waybar.
+pub async fn enable(output: &str) -> io::Result<()> {
+    ensure_data_file()?;
+    config::add_stream_bar(output)?;
+    style::add_stream_css()?;
+    restart_waybar().await
+}
+
+/// Disable the stream bottom bar: remove config + style, restart waybar.
+pub async fn disable() -> io::Result<()> {
+    config::remove_stream_bar()?;
+    style::remove_stream_css()?;
+    restart_waybar().await
+}
+
+/// Restart Omarchy's single waybar process.
+/// Uses the standard pattern: `pkill -x waybar && setsid uwsm-app -- waybar`.
+async fn restart_waybar() -> io::Result<()> {
+    tracing::info!("restarting waybar");
+
+    // Kill existing waybar(s)
+    let _ = Command::new("pkill")
+        .arg("-x")
+        .arg("waybar")
+        .output()
+        .await;
+
+    // Small delay to let the process fully exit
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+    // Launch waybar through uwsm-app (Omarchy's pattern) detached via setsid
+    let status = Command::new("setsid")
+        .arg("uwsm-app")
+        .arg("--")
+        .arg("waybar")
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
-        .kill_on_drop(true)
-        .spawn()?;
+        .status()
+        .await?;
 
-    tracing::info!("spawned waybar (pid {:?})", child.id());
-    Ok(child)
-}
-
-/// Kill a running waybar child process.
-pub async fn kill(child: &mut Child) {
-    if let Some(pid) = child.id() {
-        tracing::info!("killing waybar (pid {pid})");
+    if status.success() {
+        tracing::info!("waybar restarted successfully");
+    } else {
+        tracing::warn!("waybar restart exited with status: {status}");
     }
-    let _ = child.kill().await;
-    let _ = child.wait().await;
+
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
-// Event listener – writes stream_data.json on each event
+// Event listener — writes stream_data.json on each event
 // ---------------------------------------------------------------------------
 
 const MAX_EVENTS: usize = 15;

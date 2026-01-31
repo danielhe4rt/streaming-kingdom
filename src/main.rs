@@ -19,8 +19,8 @@ async fn main() -> io::Result<()> {
 
     let cfg = config::load().map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
 
-    // Generate waybar config files (always, so they're ready when toggled on)
-    let (wb_config, wb_style) = waybar::write_config_files(&cfg.waybar.output)?;
+    // Ensure the stream data file exists so waybar custom modules don't fail
+    waybar::ensure_data_file()?;
 
     let mut app = app::AppState::new();
 
@@ -51,6 +51,6 @@ async fn main() -> io::Result<()> {
         Arc::from(cfg.obs.capture_source.as_str()),
     );
 
-    // Run the TUI with waybar + privacy process management
-    tui::run(&mut app, &wb_config, &wb_style, privacy_cmd_tx, privacy_status_rx).await
+    // Run the TUI with waybar config merge + privacy process management
+    tui::run(&mut app, &cfg.waybar.output, privacy_cmd_tx, privacy_status_rx).await
 }

@@ -2,13 +2,11 @@ mod input;
 mod ui;
 
 use std::io::{self, Stdout};
-use std::path::PathBuf;
 use std::time::Duration;
 
 use crossterm::event::{self, Event};
 use ratatui::prelude::*;
 use ratatui::Terminal;
-use tokio::process::Child;
 use tokio::sync::{broadcast, mpsc};
 
 use crate::app::{AppState, FeatureCommand, StreamEvent};
@@ -80,8 +78,7 @@ const TICK: Duration = Duration::from_millis(33); // ~30 fps
 
 pub async fn run(
     app: &mut AppState,
-    wb_config: &PathBuf,
-    wb_style: &PathBuf,
+    waybar_output: &str,
     privacy_cmd_tx: mpsc::Sender<PrivacyCommand>,
     privacy_status_rx: mpsc::Receiver<PrivacyStatus>,
 ) -> io::Result<()> {
@@ -90,20 +87,14 @@ pub async fn run(
     let mut event_rx = app.subscribe_events();
     let cmd_tx = app.command_sender();
 
-    // Spawn waybar if it starts enabled
-    let mut wb_child: Option<Child> = if app.waybar_enabled {
-        match waybar::spawn(wb_config, wb_style) {
-            Ok(child) => Some(child),
-            Err(e) => {
-                app.status_message = Some(waybar_error_message(&e));
-                app.waybar_enabled = false;
-                tracing::warn!("failed to spawn waybar: {e}");
-                None
-            }
+    // Enable the stream bar if waybar starts enabled
+    if app.waybar_enabled {
+        if let Err(e) = waybar::enable(waybar_output).await {
+            app.status_message = Some(waybar_error_message(&e));
+            app.waybar_enabled = false;
+            tracing::warn!("failed to enable waybar stream bar: {e}");
         }
-    } else {
-        None
-    };
+    }
 
     let mut privacy_status_rx = privacy_status_rx;
 
@@ -113,9 +104,7 @@ pub async fn run(
         &mut tui,
         &mut event_rx,
         &cmd_tx,
-        &mut wb_child,
-        wb_config,
-        wb_style,
+        waybar_output,
         &privacy_cmd_tx,
         &mut privacy_status_rx,
     )
@@ -124,9 +113,11 @@ pub async fn run(
     // Send Stop to privacy monitor for clean shutdown
     let _ = privacy_cmd_tx.send(PrivacyCommand::Stop).await;
 
-    // Clean up waybar on exit
-    if let Some(child) = &mut wb_child {
-        waybar::kill(child).await;
+    // Clean up stream bar from waybar config on exit
+    if app.waybar_enabled {
+        if let Err(e) = waybar::disable().await {
+            tracing::warn!("failed to disable waybar stream bar on exit: {e}");
+        }
     }
 
     restore_terminal(&mut terminal)?;
@@ -139,9 +130,7 @@ async fn event_loop(
     tui: &mut TuiState,
     event_rx: &mut broadcast::Receiver<StreamEvent>,
     cmd_tx: &mpsc::Sender<FeatureCommand>,
-    wb_child: &mut Option<Child>,
-    wb_config: &PathBuf,
-    wb_style: &PathBuf,
+    waybar_output: &str,
     privacy_cmd_tx: &mpsc::Sender<PrivacyCommand>,
     privacy_status_rx: &mut mpsc::Receiver<PrivacyStatus>,
 ) -> io::Result<()> {
@@ -184,25 +173,21 @@ async fn event_loop(
         // React to waybar toggle changes
         if app.waybar_enabled != prev_waybar_enabled {
             if app.waybar_enabled {
-                // Spawn waybar
-                if wb_child.is_none() {
-                    match waybar::spawn(wb_config, wb_style) {
-                        Ok(child) => {
-                            *wb_child = Some(child);
-                            app.status_message = None;
-                        }
-                        Err(e) => {
-                            app.status_message = Some(waybar_error_message(&e));
-                            app.waybar_enabled = false;
-                            tracing::warn!("failed to spawn waybar: {e}");
-                        }
+                // Enable: merge config + style, restart waybar
+                match waybar::enable(waybar_output).await {
+                    Ok(()) => {
+                        app.status_message = None;
+                    }
+                    Err(e) => {
+                        app.status_message = Some(waybar_error_message(&e));
+                        app.waybar_enabled = false;
+                        tracing::warn!("failed to enable waybar stream bar: {e}");
                     }
                 }
             } else {
-                // Kill waybar
-                if let Some(child) = wb_child {
-                    waybar::kill(child).await;
-                    *wb_child = None;
+                // Disable: remove config + style, restart waybar
+                if let Err(e) = waybar::disable().await {
+                    tracing::warn!("failed to disable waybar stream bar: {e}");
                 }
                 app.status_message = None;
             }
@@ -225,8 +210,8 @@ async fn event_loop(
 
 fn waybar_error_message(err: &io::Error) -> String {
     if err.kind() == io::ErrorKind::NotFound {
-        "waybar not found — install waybar to use the bottom bar".into()
+        "waybar config not found — is Omarchy's waybar installed?".into()
     } else {
-        format!("failed to start waybar: {err}")
+        format!("waybar error: {err}")
     }
 }
