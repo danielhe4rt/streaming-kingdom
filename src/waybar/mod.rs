@@ -59,26 +59,11 @@ pub async fn disable() -> io::Result<()> {
     restart_waybar().await
 }
 
-/// Restart Omarchy's single waybar process.
-/// Uses the standard pattern: `pkill -x waybar && setsid uwsm-app -- waybar`.
+/// Restart Omarchy's single waybar process via `omarchy-restart-waybar`.
 async fn restart_waybar() -> io::Result<()> {
-    tracing::info!("restarting waybar");
+    tracing::info!("restarting waybar via omarchy-restart-waybar");
 
-    // Kill existing waybar(s)
-    let _ = Command::new("pkill")
-        .arg("-x")
-        .arg("waybar")
-        .output()
-        .await;
-
-    // Small delay to let the process fully exit
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Launch waybar through uwsm-app (Omarchy's pattern) detached via setsid
-    let status = Command::new("setsid")
-        .arg("uwsm-app")
-        .arg("--")
-        .arg("waybar")
+    let status = Command::new("omarchy-restart-waybar")
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -88,7 +73,7 @@ async fn restart_waybar() -> io::Result<()> {
     if status.success() {
         tracing::info!("waybar restarted successfully");
     } else {
-        tracing::warn!("waybar restart exited with status: {status}");
+        tracing::warn!("omarchy-restart-waybar exited with status: {status}");
     }
 
     Ok(())

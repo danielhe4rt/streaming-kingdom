@@ -138,7 +138,7 @@ impl AppState {
         let (command_tx, command_rx) = mpsc::channel(COMMAND_CHANNEL_CAPACITY);
 
         Self {
-            waybar_enabled: true,
+            waybar_enabled: false,
             privacy_enabled: false,
             alerts_enabled: true,
             event_tx,
