@@ -1,4 +1,5 @@
 mod alerts;
+mod app;
 mod config;
 mod privacy;
 mod stream;
