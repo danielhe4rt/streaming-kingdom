@@ -6,6 +6,8 @@ use std::{fs, io};
 pub struct Config {
     pub obs: ObsConfig,
     pub twitch: TwitchConfig,
+    #[serde(default)]
+    pub livepix: LivepixConfig,
     pub alerts: AlertsConfig,
     pub waybar: WaybarConfig,
     pub privacy: PrivacyConfig,
@@ -27,6 +29,23 @@ pub struct TwitchConfig {
     pub oauth_token: String,
     pub refresh_token: String,
     pub broadcaster_user_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct LivepixConfig {
+    pub client_id: String,
+    pub client_secret: String,
+    pub webhook_port: u16,
+    #[serde(default)]
+    pub tts: TtsConfig,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TtsConfig {
+    pub elevenlabs_api_key: String,
+    pub voice_id: String,
+    pub model_id: String,
+    pub language_code: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -52,6 +71,28 @@ pub struct EventLogConfig {
     pub show_system: bool,
     pub show_hyprland: bool,
     pub max_events: usize,
+}
+
+impl Default for LivepixConfig {
+    fn default() -> Self {
+        Self {
+            client_id: String::new(),
+            client_secret: String::new(),
+            webhook_port: 8000,
+            tts: TtsConfig::default(),
+        }
+    }
+}
+
+impl Default for TtsConfig {
+    fn default() -> Self {
+        Self {
+            elevenlabs_api_key: String::new(),
+            voice_id: "Qrdut83w0Cr152Yb4Xn3".into(),
+            model_id: "eleven_v3".into(),
+            language_code: "pt".into(),
+        }
+    }
 }
 
 impl Default for EventLogConfig {
@@ -81,6 +122,7 @@ impl Default for Config {
                 refresh_token: String::new(),
                 broadcaster_user_id: String::new(),
             },
+            livepix: LivepixConfig::default(),
             alerts: AlertsConfig {
                 overlay_url: String::new(),
                 browser_command: "firefox".into(),
