@@ -149,6 +149,7 @@ fn is_group_visible(group: EventGroup, tui: &TuiState) -> bool {
         EventGroup::Privacy => tui.filter_privacy,
         EventGroup::System => tui.filter_system,
         EventGroup::Hyprland => tui.filter_hyprland,
+        EventGroup::Chat => tui.filter_chat,
     }
 }
 
@@ -168,6 +169,7 @@ fn make_event_log_block(focused: bool, tui: &TuiState) -> Block<'static> {
         ("P", tui.filter_privacy),
         ("Sys", tui.filter_system),
         ("H", tui.filter_hyprland),
+        ("C", tui.filter_chat),
     ];
 
     let mut title_spans: Vec<Span> = vec![Span::raw(" Event Log ")];
@@ -205,6 +207,7 @@ const COLOR_WINDOW_CLOSE: Color = Color::Rgb(0x67, 0x6e, 0x95);
 const COLOR_TITLE_CHANGE: Color = Color::Rgb(0x82, 0xaa, 0xff);
 const COLOR_WORKSPACE: Color = Color::Rgb(0xc7, 0x92, 0xea);
 const COLOR_MONITOR: Color = Color::Rgb(0xff, 0xcb, 0x6b);
+const COLOR_CHAT: Color = Color::Rgb(0xc3, 0xe8, 0x8d);
 
 fn format_app_event(entry: &AppEventEntry) -> Line<'static> {
     let secs = entry.elapsed.as_secs();
@@ -352,6 +355,13 @@ fn format_app_event(entry: &AppEventEntry) -> Line<'static> {
             COLOR_INFO,
             format!("Window moved to {workspace}"),
         ),
+
+        // --- Chat group ---
+        AppEvent::ChatMessage { username, text } => (
+            "💬",
+            COLOR_CHAT,
+            format!("{username}: {text}"),
+        ),
     };
 
     Line::from(vec![
@@ -371,7 +381,7 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &AppState) {
             .style(Style::default().fg(Color::Red).bg(Color::Black));
         frame.render_widget(bar, area);
     } else {
-        let help = " q: quit | j/k: navigate | Space/Enter: toggle | Tab: switch pane | 1-4: filter events";
+        let help = " q: quit | j/k: navigate | Space/Enter: toggle | Tab: switch pane | 1-5: filter events";
         let bar =
             Paragraph::new(help).style(Style::default().fg(Color::DarkGray).bg(Color::Black));
         frame.render_widget(bar, area);

@@ -78,6 +78,7 @@ pub enum EventGroup {
     Privacy,
     System,
     Hyprland,
+    Chat,
 }
 
 #[derive(Debug, Clone)]
@@ -109,6 +110,9 @@ pub enum AppEvent {
     WorkspaceChanged { name: String },
     MonitorFocused { monitor: String },
     WindowMoved { address: String, workspace: String },
+
+    // --- Group: Chat ---
+    ChatMessage { username: String, text: String },
 }
 
 impl AppEvent {
@@ -126,6 +130,7 @@ impl AppEvent {
             | AppEvent::WorkspaceChanged { .. }
             | AppEvent::MonitorFocused { .. }
             | AppEvent::WindowMoved { .. } => EventGroup::Hyprland,
+            AppEvent::ChatMessage { .. } => EventGroup::Chat,
             _ => EventGroup::System,
         }
     }

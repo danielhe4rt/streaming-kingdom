@@ -13,6 +13,7 @@ use crate::app::{AppEvent, AppState, FeatureCommand, StreamEvent};
 use crate::config::EventLogConfig;
 use crate::livepix::{LivepixCommand, LivepixStatus};
 use crate::privacy::{PrivacyCommand, PrivacyStatus};
+use crate::stream::chat::ChatMessage;
 use crate::waybar;
 
 // ---------------------------------------------------------------------------
@@ -48,6 +49,7 @@ pub struct TuiState {
     pub filter_privacy: bool,
     pub filter_system: bool,
     pub filter_hyprland: bool,
+    pub filter_chat: bool,
 }
 
 impl TuiState {
@@ -62,6 +64,7 @@ impl TuiState {
             filter_privacy: event_log_config.show_privacy,
             filter_system: event_log_config.show_system,
             filter_hyprland: event_log_config.show_hyprland,
+            filter_chat: event_log_config.show_chat,
         }
     }
 }
@@ -100,6 +103,7 @@ pub async fn run(
     event_log_config: &EventLogConfig,
     mut hyprland_rx: mpsc::Receiver<AppEvent>,
     mut twitch_event_rx: mpsc::Receiver<AppEvent>,
+    mut chat_rx: mpsc::Receiver<ChatMessage>,
 ) -> io::Result<()> {
     let mut terminal = init_terminal()?;
     let mut tui = TuiState::new(event_log_config);
@@ -131,6 +135,7 @@ pub async fn run(
         &mut livepix_status_rx,
         &mut hyprland_rx,
         &mut twitch_event_rx,
+        &mut chat_rx,
     )
     .await;
 
@@ -164,6 +169,7 @@ async fn event_loop(
     livepix_status_rx: &mut mpsc::Receiver<LivepixStatus>,
     hyprland_rx: &mut mpsc::Receiver<AppEvent>,
     twitch_event_rx: &mut mpsc::Receiver<AppEvent>,
+    chat_rx: &mut mpsc::Receiver<ChatMessage>,
 ) -> io::Result<()> {
     let mut prev_waybar_enabled = app.waybar_enabled;
     let mut prev_privacy_enabled = app.privacy_enabled;
@@ -267,6 +273,14 @@ async fn event_loop(
         // Drain Twitch background events into the event log.
         while let Ok(ev) = twitch_event_rx.try_recv() {
             app.log_event(ev);
+        }
+
+        // Drain Twitch IRC chat messages into the event log.
+        while let Ok(msg) = chat_rx.try_recv() {
+            app.log_event(AppEvent::ChatMessage {
+                username: msg.username,
+                text: msg.text,
+            });
         }
 
         // Process any pending feature commands.

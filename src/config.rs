@@ -31,6 +31,8 @@ pub struct TwitchConfig {
     pub oauth_token: String,
     pub refresh_token: String,
     pub broadcaster_user_id: String,
+    #[serde(default)]
+    pub channel: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -72,7 +74,13 @@ pub struct EventLogConfig {
     pub show_privacy: bool,
     pub show_system: bool,
     pub show_hyprland: bool,
+    #[serde(default = "default_true")]
+    pub show_chat: bool,
     pub max_events: usize,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl LivepixConfig {
@@ -117,6 +125,9 @@ impl TwitchConfig {
         if let Ok(v) = env::var("TWITCH_BROADCASTER_USER_ID") {
             self.broadcaster_user_id = v;
         }
+        if let Ok(v) = env::var("TWITCH_CHANNEL") {
+            self.channel = v;
+        }
     }
 }
 
@@ -149,6 +160,7 @@ impl Default for EventLogConfig {
             show_privacy: true,
             show_system: true,
             show_hyprland: false,
+            show_chat: true,
             max_events: 100,
         }
     }
@@ -169,6 +181,7 @@ impl Default for Config {
                 oauth_token: String::new(),
                 refresh_token: String::new(),
                 broadcaster_user_id: String::new(),
+                channel: String::new(),
             },
             livepix: LivepixConfig::default(),
             alerts: AlertsConfig {

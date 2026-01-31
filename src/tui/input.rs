@@ -55,6 +55,9 @@ pub async fn handle_key(
         KeyCode::Char('4') if tui.focused_pane == Pane::EventLog => {
             tui.filter_hyprland = !tui.filter_hyprland;
         }
+        KeyCode::Char('5') if tui.focused_pane == Pane::EventLog => {
+            tui.filter_chat = !tui.filter_chat;
+        }
 
         _ => {}
     }

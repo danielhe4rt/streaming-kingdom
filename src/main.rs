@@ -123,6 +123,21 @@ async fn main() -> io::Result<()> {
         cfg.livepix.clone(),
     );
 
+    // Spawn Twitch IRC chat client
+    let (chat_tx, chat_rx) = mpsc::channel::<stream::chat::ChatMessage>(256);
+    if !cfg.twitch.channel.is_empty() {
+        let chat = stream::ChatClient::new(cfg.twitch.channel.clone(), None, None);
+        tokio::spawn(chat.run(chat_tx));
+        app.log_event(AppEvent::Info(format!(
+            "Twitch chat connected: #{}",
+            cfg.twitch.channel
+        )));
+    } else {
+        app.log_event(AppEvent::Info(
+            "Twitch chat not configured (no channel)".into(),
+        ));
+    }
+
     // Spawn Hyprland event listener for the event log
     let (hyprland_tx, hyprland_rx) = mpsc::channel::<AppEvent>(128);
     let _hyprland_handle = hyprland::spawn(hyprland_tx);
@@ -138,6 +153,7 @@ async fn main() -> io::Result<()> {
         &cfg.event_log,
         hyprland_rx,
         twitch_event_rx,
+        chat_rx,
     )
     .await
 }
