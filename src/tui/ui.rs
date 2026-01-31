@@ -4,7 +4,7 @@ use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, Wrap};
 use crate::app::{AppEvent, AppEventEntry, AppState, EventGroup, StreamEvent};
 use super::{Pane, TuiState};
 
-const TOGGLE_LABELS: [&str; 3] = ["Waybar", "Privacy Monitor", "Alerts Browser"];
+const TOGGLE_LABELS: [&str; 4] = ["Waybar", "Privacy Monitor", "Alerts Browser", "Livepix Donations"];
 
 pub fn draw(frame: &mut Frame, app: &AppState, tui: &TuiState) {
     let [main_area, status_bar] = Layout::vertical([
@@ -34,7 +34,7 @@ fn draw_toggles(frame: &mut Frame, area: Rect, app: &AppState, tui: &TuiState) {
     let focused = tui.focused_pane == Pane::Toggles;
     let block = make_block("Features", focused);
 
-    let enabled = [app.waybar_enabled, app.privacy_enabled, app.alerts_enabled];
+    let enabled = [app.waybar_enabled, app.privacy_enabled, app.alerts_enabled, app.livepix_enabled];
 
     let items: Vec<ListItem> = TOGGLE_LABELS
         .iter()
@@ -54,14 +54,22 @@ fn draw_toggles(frame: &mut Frame, area: Rect, app: &AppState, tui: &TuiState) {
             } else {
                 Style::default().fg(Color::DarkGray)
             };
-            let suffix = if i == 1 {
-                // Privacy Monitor — show live status when available
-                match &tui.privacy_status {
-                    Some(status) => format!("  ({status})"),
-                    None => String::new(),
+            let suffix = match i {
+                1 => {
+                    // Privacy Monitor — show live status when available
+                    match &tui.privacy_status {
+                        Some(status) => format!("  ({status})"),
+                        None => String::new(),
+                    }
                 }
-            } else {
-                String::new()
+                3 => {
+                    // Livepix Donations — show listening port or error status
+                    match &tui.livepix_status {
+                        Some(status) => format!("  ({status})"),
+                        None => String::new(),
+                    }
+                }
+                _ => String::new(),
             };
             ListItem::new(format!("{marker} {checkbox} {label}{suffix}")).style(style)
         })

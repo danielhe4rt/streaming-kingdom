@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 use crate::app::{AppState, FeatureCommand};
 use super::{Pane, TuiState};
 
-const TOGGLE_COUNT: usize = 3;
+const TOGGLE_COUNT: usize = 4;
 
 /// Handle a key event. Returns `true` when the app should quit.
 pub async fn handle_key(
@@ -78,6 +78,11 @@ fn toggle_command(cursor: usize, app: &AppState) -> Option<FeatureCommand> {
             FeatureCommand::DisableAlerts
         } else {
             FeatureCommand::EnableAlerts
+        }),
+        3 => Some(if app.livepix_enabled {
+            FeatureCommand::DisableLivepix
+        } else {
+            FeatureCommand::EnableLivepix
         }),
         _ => None,
     }

@@ -40,6 +40,7 @@ pub struct TuiState {
     pub toggle_cursor: usize,
     pub event_log_scroll: u16,
     pub privacy_status: Option<String>,
+    pub livepix_status: Option<String>,
 
     // Event log group filters (true = visible)
     pub filter_stream: bool,
@@ -55,6 +56,7 @@ impl TuiState {
             toggle_cursor: 0,
             event_log_scroll: 0,
             privacy_status: None,
+            livepix_status: None,
             filter_stream: event_log_config.show_stream,
             filter_privacy: event_log_config.show_privacy,
             filter_system: event_log_config.show_system,
