@@ -1,5 +1,7 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
+use hyprland::prelude::*;
 use tokio::sync::mpsc;
 
 use crate::config::PrivacyConfig;
@@ -184,41 +186,132 @@ async fn run_monitor(
             .await;
     }
 
-    // Set up the Hyprland event listener.
-    // We use a channel to funnel window titles from the listener callback
-    // into our select loop, because the listener runs in its own task.
-    let (title_tx, mut title_rx) = mpsc::channel::<Option<String>>(64);
+    // Track ALL open windows so blur stays active when a sensitive file is
+    // open on any monitor, not just the focused one.
+    // Key = window address (hex string), Value = window title.
+    let mut windows: HashMap<String, String> = HashMap::new();
 
-    let listener_handle = tokio::spawn(async move {
-        let mut listener = hyprland::event_listener::AsyncEventListener::new();
+    // Seed with every window that is already open.
+    match hyprland::data::Clients::get_async().await {
+        Ok(clients) => {
+            for client in clients {
+                windows.insert(client.address.to_string(), client.title);
+            }
+        }
+        Err(e) => {
+            tracing::warn!("failed to query existing windows: {e}");
+        }
+    }
 
-        let tx = title_tx.clone();
-        listener.add_active_window_changed_handler(move |data| {
-            let tx = tx.clone();
-            Box::pin(async move {
-                let title = data.map(|w| w.title);
-                let _ = tx.send(title).await;
-            })
-        });
+    // Channel carrying window lifecycle events from the Hyprland listener.
+    #[derive(Debug)]
+    enum WindowEvent {
+        Opened { address: String, title: String },
+        Closed { address: String },
+        TitleChanged { address: String, title: String },
+    }
 
-        if let Err(e) = listener.start_listener_async().await {
-            tracing::error!("hyprland listener error: {e}");
+    let (event_tx, mut event_rx) = mpsc::channel::<WindowEvent>(64);
+
+    let listener_handle = tokio::spawn({
+        let tx = event_tx.clone();
+        async move {
+            let mut listener = hyprland::event_listener::AsyncEventListener::new();
+
+            // Track newly opened windows.
+            let tx_open = tx.clone();
+            listener.add_window_opened_handler(move |data| {
+                let tx = tx_open.clone();
+                Box::pin(async move {
+                    let _ = tx
+                        .send(WindowEvent::Opened {
+                            address: data.window_address.to_string(),
+                            title: data.window_title,
+                        })
+                        .await;
+                })
+            });
+
+            // Track closed windows.
+            let tx_close = tx.clone();
+            listener.add_window_closed_handler(move |addr| {
+                let tx = tx_close.clone();
+                Box::pin(async move {
+                    let _ = tx
+                        .send(WindowEvent::Closed {
+                            address: addr.to_string(),
+                        })
+                        .await;
+                })
+            });
+
+            // Track title changes (e.g. editor opens a different file).
+            let tx_title = tx.clone();
+            listener.add_window_title_changed_handler(move |data| {
+                let tx = tx_title.clone();
+                Box::pin(async move {
+                    let _ = tx
+                        .send(WindowEvent::TitleChanged {
+                            address: data.address.to_string(),
+                            title: data.title,
+                        })
+                        .await;
+                })
+            });
+
+            if let Err(e) = listener.start_listener_async().await {
+                tracing::error!("hyprland listener error: {e}");
+            }
         }
     });
 
     let mut blur_active = false;
 
+    // Evaluate initial window set – a sensitive file may already be open.
+    let has_sensitive = windows
+        .values()
+        .any(|t| is_sensitive(t, &config.sensitive_patterns));
+    if has_sensitive {
+        if let Some(ref client) = obs {
+            enable_blur(client, capture_source).await;
+        }
+        blur_active = true;
+        let title = windows
+            .values()
+            .find(|t| is_sensitive(t, &config.sensitive_patterns))
+            .cloned()
+            .unwrap_or_default();
+        let _ = status_tx
+            .send(PrivacyStatus::BlurEnabled { title })
+            .await;
+    }
+
     loop {
         tokio::select! {
-            // Window title change from Hyprland.
-            Some(maybe_title) = title_rx.recv() => {
-                let sensitive = match &maybe_title {
-                    Some(title) => is_sensitive(title, &config.sensitive_patterns),
-                    None => false,
-                };
+            // Window lifecycle event from Hyprland.
+            Some(event) = event_rx.recv() => {
+                match event {
+                    WindowEvent::Opened { address, title } => {
+                        windows.insert(address, title);
+                    }
+                    WindowEvent::Closed { address } => {
+                        windows.remove(&address);
+                    }
+                    WindowEvent::TitleChanged { address, title } => {
+                        windows.insert(address, title);
+                    }
+                }
 
-                if sensitive && !blur_active {
-                    let title = maybe_title.unwrap_or_default();
+                let has_sensitive = windows
+                    .values()
+                    .any(|t| is_sensitive(t, &config.sensitive_patterns));
+
+                if has_sensitive && !blur_active {
+                    let title = windows
+                        .values()
+                        .find(|t| is_sensitive(t, &config.sensitive_patterns))
+                        .cloned()
+                        .unwrap_or_default();
                     if let Some(ref client) = obs {
                         enable_blur(client, capture_source).await;
                     }
@@ -226,7 +319,7 @@ async fn run_monitor(
                     let _ = status_tx
                         .send(PrivacyStatus::BlurEnabled { title })
                         .await;
-                } else if !sensitive && blur_active {
+                } else if !has_sensitive && blur_active {
                     if let Some(ref client) = obs {
                         disable_blur(client, capture_source).await;
                     }
