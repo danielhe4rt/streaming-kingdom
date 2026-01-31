@@ -255,6 +255,17 @@ impl TwitchClient {
 
     /// Create EventSub subscriptions via the Helix REST API.
     async fn subscribe_events(&self, session_id: &str) -> Result<(), ClientError> {
+        if self.config.broadcaster_user_id.is_empty() {
+            tracing::warn!("broadcaster_user_id is empty, skipping EventSub subscriptions");
+            let _ = self
+                .app_event_tx
+                .send(AppEvent::Error(
+                    "Twitch: broadcaster_user_id not set, skipping subscriptions".into(),
+                ))
+                .await;
+            return Ok(());
+        }
+
         for def in SUBSCRIPTIONS {
             let mut condition = serde_json::Map::new();
 
@@ -288,10 +299,9 @@ impl TwitchClient {
                 }
             });
 
-            let token = self
-                .app_token
-                .as_deref()
-                .unwrap_or(&self.config.oauth_token);
+            // WebSocket transport requires a user access token, not an app token.
+            // App tokens are only valid with webhook transport.
+            let token = &self.config.oauth_token;
 
             let resp = self
                 .http
@@ -306,6 +316,13 @@ impl TwitchClient {
 
             if resp.status().is_success() {
                 tracing::info!(sub_type = def.sub_type, "subscribed");
+                let _ = self
+                    .app_event_tx
+                    .send(AppEvent::Info(format!(
+                        "Twitch: subscribed to {}",
+                        def.sub_type
+                    )))
+                    .await;
             } else {
                 let status = resp.status();
                 let body = resp.text().await.unwrap_or_default();
@@ -315,6 +332,13 @@ impl TwitchClient {
                     body,
                     "subscription failed"
                 );
+                let _ = self
+                    .app_event_tx
+                    .send(AppEvent::Error(format!(
+                        "Twitch: {} failed ({})",
+                        def.sub_type, status
+                    )))
+                    .await;
                 // Don't abort on individual subscription failures —
                 // some scopes may not be authorized.
             }
