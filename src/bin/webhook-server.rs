@@ -119,7 +119,6 @@ async fn main() {
                 handle_webhook(body, state.clone()).await
             }
         ))
-        .route("/webhooks", get(|| async { "Webhook endpoint ready" }))
         .route("/", axum::routing::get(|| async { "Webhook Server Running" }));
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 8000));
@@ -191,15 +190,17 @@ async fn text_to_speech(
 
     // Use ElevenLabs API directly
     // Voice ID for Rachel: 21m00Tcm4TlvDq8ikWAM
-    let voice_id = "21m00Tcm4TlvDq8ikWAM";
+    let voice_id = "Qrdut83w0Cr152Yb4Xn3";
     let url = format!("https://api.elevenlabs.io/v1/text-to-speech/{}", voice_id);
 
     let payload = serde_json::json!({
         "text": text,
-        "model_id": "eleven_monolingual_v1",
+        "model_id": "eleven_v3",
+        "language_code": "pt",
         "voice_settings": {
             "stability": 0.5,
-            "similarity_boost": 0.75
+            "similarity_boost": 0.75,
+            "speed": 0.7
         }
     });
 
@@ -223,7 +224,38 @@ async fn text_to_speech(
                         std::fs::write(&filename, audio_bytes)
                             .map_err(|e| e.to_string())?;
                         println!("💾 Saved to: {}", filename);
-                        println!("🔊 Audio file ready to play!");
+
+                        // Play the audio file
+                        println!("🎵 Playing audio...");
+                        match std::process::Command::new("mpv")
+                            .arg("--no-video")
+                            .arg("--really-quiet")
+                            .arg(&filename)
+                            .spawn()
+                        {
+                            Ok(_) => {
+                                println!("▶️  Audio playing!");
+                            }
+                            Err(_) => {
+                                // Fallback to ffplay if mpv not available
+                                match std::process::Command::new("ffplay")
+                                    .arg("-nodisp")
+                                    .arg("-autoexit")
+                                    .arg("-loglevel")
+                                    .arg("quiet")
+                                    .arg(&filename)
+                                    .spawn()
+                                {
+                                    Ok(_) => {
+                                        println!("▶️  Audio playing with ffplay!");
+                                    }
+                                    Err(_) => {
+                                        println!("⚠️  Could not play audio (mpv or ffplay not found)");
+                                        println!("   Manual playback: mpv {}", filename);
+                                    }
+                                }
+                            }
+                        }
                     }
                     Err(e) => {
                         println!("❌ Failed to read audio bytes: {}", e);

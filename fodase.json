@@ -1,0 +1,43 @@
+{
+    "id": "a47dfd32-928c-4644-a95e-bdc15bff63e0",
+    "message": {
+        "type": 2,
+        "topic": "widget:f387d5ad-f160-490b-8388-9cc05fdf64f4",
+        "event": "notification:show",
+        "payload": {
+            "alertId": "fc343b32-04d7-4733-a4df-aedd44851a74",
+            "data": {
+                "buildNumber": 15,
+                "config": {
+                    "maximumDuration": 60,
+                    "minimumDuration": 5,
+                    "showAiDisclaimer": false,
+                    "textToSpeechPhrase": "\u003cspeak\u003edanielhe4rt mandou um real\u003cbreak time=\"500ms\"/\u003evai caraio peloamordedeus\u003c/speak\u003e",
+                    "textToSpeechVoice": null
+                },
+                "data": {
+                    "amount": {
+                        "currency": "BRL",
+                        "formatted": "R$ 1,00",
+                        "value": 1
+                    },
+                    "author": "danielhe4rt",
+                    "message": "vai caraio peloamordedeus",
+                    "type": "message"
+                },
+                "parameters": {
+                    "headingColor": "rgba(26,46,89,1)",
+                    "media": "https://cdn.livepix.gg/widget/variables/a51b3090-95d8-499a-bc46-94e89185fe6f.png",
+                    "messageColor": "rgba(255,255,255,1)"
+                },
+                "templateId": "62da400b811122cb9f0da40e",
+                "templateType": "code",
+                "type": "notification",
+                "userId": "63934cd8e4def3a7cf0a870f",
+                "versionNumber": 11
+            },
+            "receipt": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJodHRwczovL2J1enplci5saXZlcGl4LmdnIiwiaWF0IjoxNzY5ODkwOTU2LCJpc3MiOiJodHRwczovL2xpdmVwaXguZ2ciLCJzdWIiOiJmYzM0M2IzMi0wNGQ3LTQ3MzMtYTRkZi1hZWRkNDQ4NTFhNzQifQ.aHQL4jRcyRNxdyvIUFM1tI-OR0NxM9W7EsKnxtk3x8K0PTWTPazWRK-d-LzLHWyyRfYn0zTdPHzi2VXSgidU6OJP-QQX2nZoKRplaRbPpVmX71Wx1dLnXZCqJ-v5fYIJwk6ii8wsZiOy1-HfyCUx1SIoL2NJHNUCtFpPkOYvJas"
+        },
+        "time": 1769890956
+    }
+}

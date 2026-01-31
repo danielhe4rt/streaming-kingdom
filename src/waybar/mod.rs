@@ -26,6 +26,44 @@ fn data_file_path() -> io::Result<PathBuf> {
 }
 
 // ---------------------------------------------------------------------------
+// Scripts directory layout (for external Python scripts)
+// ---------------------------------------------------------------------------
+
+fn scripts_dir() -> io::Result<PathBuf> {
+    let config = dirs::config_dir().ok_or_else(|| {
+        io::Error::new(io::ErrorKind::NotFound, "no config directory available")
+    })?;
+    Ok(config.join("streams-toolkit").join("scripts"))
+}
+
+pub fn stream_events_script_path() -> io::Result<PathBuf> {
+    Ok(scripts_dir()?.join("stream_events.py"))
+}
+
+/// Ensure the Python script exists for waybar exec commands.
+const STREAM_EVENTS_SCRIPT: &str = include_str!("../../scripts/stream_events.py");
+
+pub fn ensure_scripts() -> io::Result<()> {
+    let script_path = stream_events_script_path()?;
+    if !script_path.exists() {
+        if let Some(parent) = script_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&script_path, STREAM_EVENTS_SCRIPT)?;
+        // Make executable on Unix systems
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&script_path)?.permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&script_path, perms)?;
+        }
+        tracing::info!("installed stream_events.py script to {}", script_path.display());
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Ensure the data file exists so waybar custom modules don't fail
 // ---------------------------------------------------------------------------
 
@@ -61,6 +99,7 @@ const SEED_EVENTS: &str = r#"[
 /// Enable the stream bottom bar: merge config + style, restart waybar.
 pub async fn enable(output: &str) -> io::Result<()> {
     ensure_data_file()?;
+    ensure_scripts()?;
     config::add_stream_bar(output)?;
     style::add_stream_css()?;
     restart_waybar().await

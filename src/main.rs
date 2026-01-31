@@ -8,14 +8,58 @@ mod tui;
 mod waybar;
 
 use std::io;
+use std::path::Path;
 use std::sync::Arc;
 
 use tokio::sync::mpsc;
 
 use app::AppEvent;
 
+/// Sync Python files from project to ~/.config/streams-toolkit/
+fn sync_python_files() -> io::Result<()> {
+    let project_dir = Path::new("/home/danielhe4rt/dev/lives/streams-toolkit");
+    let config_dir = Path::new("/home/danielhe4rt/.config/streams-toolkit");
+    
+    // Files to sync: (source_relative_path, dest_relative_path)
+    let files_to_sync = vec![
+        ("scripts/stream_events.py", "scripts/stream_events.py"),
+    ];
+    
+    for (src_rel, dst_rel) in files_to_sync {
+        let src = project_dir.join(src_rel);
+        let dst = config_dir.join(dst_rel);
+        
+        // Check if files differ or destination doesn't exist
+        let needs_sync = if !dst.exists() {
+            true
+        } else {
+            // Compare file contents
+            let src_content = std::fs::read(&src)?;
+            let dst_content = std::fs::read(&dst)?;
+            src_content != dst_content
+        };
+        
+        if needs_sync {
+            println!("⚠️  {} differs - syncing...", src_rel);
+            // Ensure parent directory exists
+            if let Some(parent) = dst.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::copy(&src, &dst)?;
+            println!("✅ Synced {}", src_rel);
+        }
+    }
+    
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> io::Result<()> {
+    // Sync Python files on startup (project files are source of truth)
+    if let Err(e) = sync_python_files() {
+        eprintln!("Warning: Failed to sync Python files: {}", e);
+    }
+
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
