@@ -64,6 +64,8 @@ pub enum FeatureCommand {
     DisablePrivacy,
     EnableAlerts,
     DisableAlerts,
+    EnableLivepix,
+    DisableLivepix,
 }
 
 // ---------------------------------------------------------------------------
@@ -177,6 +179,7 @@ pub struct AppState {
     pub waybar_enabled: bool,
     pub privacy_enabled: bool,
     pub alerts_enabled: bool,
+    pub livepix_enabled: bool,
 
     // broadcast: stream events (1 producer → N consumers)
     pub event_tx: broadcast::Sender<StreamEvent>,
@@ -208,6 +211,7 @@ impl AppState {
             waybar_enabled: false,
             privacy_enabled: false,
             alerts_enabled: true,
+            livepix_enabled: false,
             event_tx,
             command_tx,
             command_rx,
@@ -288,6 +292,20 @@ impl AppState {
                 self.alerts_enabled = false;
                 self.log_event(AppEvent::FeatureToggled {
                     feature: "Alerts".into(),
+                    enabled: false,
+                });
+            }
+            FeatureCommand::EnableLivepix => {
+                self.livepix_enabled = true;
+                self.log_event(AppEvent::FeatureToggled {
+                    feature: "Livepix".into(),
+                    enabled: true,
+                });
+            }
+            FeatureCommand::DisableLivepix => {
+                self.livepix_enabled = false;
+                self.log_event(AppEvent::FeatureToggled {
+                    feature: "Livepix".into(),
                     enabled: false,
                 });
             }
