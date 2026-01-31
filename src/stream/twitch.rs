@@ -107,12 +107,24 @@ impl TwitchClient {
             match self.connect_and_listen(&connect_url).await {
                 Ok(ReconnectAction::ServerReconnect(url)) => {
                     tracing::info!("reconnecting to server-provided URL");
+                    let _ = self
+                        .app_event_tx
+                        .send(AppEvent::Info(
+                            "Twitch: server-initiated reconnect".into(),
+                        ))
+                        .await;
                     connect_url = url;
                     delay = INITIAL_RECONNECT_DELAY;
                     // Server reconnects preserve subscriptions, connect immediately.
                 }
                 Ok(ReconnectAction::Disconnected) | Err(_) => {
                     tracing::warn!("disconnected, reconnecting in {delay:?}");
+                    let _ = self
+                        .app_event_tx
+                        .send(AppEvent::Error(format!(
+                            "Twitch: disconnected, reconnecting in {delay:?}"
+                        )))
+                        .await;
                     time::sleep(delay).await;
                     delay = (delay * 2).min(MAX_RECONNECT_DELAY);
                     // Reset to default URL on unexpected disconnect.
@@ -135,10 +147,18 @@ impl TwitchClient {
         let (mut sink, mut stream) = ws.split();
 
         tracing::info!("connected to EventSub WebSocket");
+        let _ = self
+            .app_event_tx
+            .send(AppEvent::Info("Twitch: connected to EventSub".into()))
+            .await;
 
         // Step 1: Wait for the Welcome message (contains session_id).
         let session_id = wait_for_welcome(&mut stream).await?;
         tracing::info!(session_id, "received welcome");
+        let _ = self
+            .app_event_tx
+            .send(AppEvent::Info("Twitch: session established".into()))
+            .await;
 
         // Step 2: Subscribe to all event types.
         // Only subscribe on fresh connections (not server-initiated reconnects
@@ -155,6 +175,10 @@ impl TwitchClient {
         // The keepalive timeout is sent in the welcome message, but Twitch
         // defaults to 10 seconds. We use a generous timeout.
         let keepalive_timeout = Duration::from_secs(30);
+        let _ = self
+            .app_event_tx
+            .send(AppEvent::Info("Twitch: listening for events".into()))
+            .await;
 
         loop {
             let msg = time::timeout(keepalive_timeout, stream.next()).await;
@@ -172,6 +196,12 @@ impl TwitchClient {
                 }
                 Ok(Some(Ok(Message::Close(_)))) => {
                     tracing::info!("server closed connection");
+                    let _ = self
+                        .app_event_tx
+                        .send(AppEvent::Info(
+                            "Twitch: server closed connection".into(),
+                        ))
+                        .await;
                     return Ok(ReconnectAction::Disconnected);
                 }
                 Ok(Some(Ok(_))) => {
@@ -179,6 +209,10 @@ impl TwitchClient {
                 }
                 Ok(Some(Err(e))) => {
                     tracing::error!("WebSocket error: {e}");
+                    let _ = self
+                        .app_event_tx
+                        .send(AppEvent::Error(format!("Twitch: WebSocket error: {e}")))
+                        .await;
                     return Err(ClientError::WebSocket(e.to_string()));
                 }
                 Ok(None) => {
@@ -187,6 +221,12 @@ impl TwitchClient {
                 }
                 Err(_) => {
                     tracing::warn!("keepalive timeout — server may be gone");
+                    let _ = self
+                        .app_event_tx
+                        .send(AppEvent::Error(
+                            "Twitch: keepalive timeout, reconnecting...".into(),
+                        ))
+                        .await;
                     return Ok(ReconnectAction::Disconnected);
                 }
             }
@@ -323,6 +363,11 @@ impl TwitchClient {
                 let event = &msg["payload"]["event"];
 
                 if let Some(stream_event) = parse_event(sub_type, event) {
+                    let _ = self
+                        .app_event_tx
+                        .try_send(AppEvent::Info(format!(
+                            "Twitch: received {sub_type} event"
+                        )));
                     let _ = self.event_tx.send(stream_event);
                 }
             }
@@ -342,6 +387,11 @@ impl TwitchClient {
                     .as_str()
                     .unwrap_or("unknown");
                 tracing::warn!(sub_type, reason, "subscription revoked");
+                let _ = self
+                    .app_event_tx
+                    .try_send(AppEvent::Error(format!(
+                        "Twitch: {sub_type} subscription revoked ({reason})"
+                    )));
             }
 
             other => {
