@@ -1,3 +1,9 @@
+mod alerts;
+mod privacy;
+mod stream;
+mod tui;
+mod waybar;
+
 use hyprland::async_closure;
 use hyprland::event_listener::{AsyncEventListener, EventListener};
 use obws::Client;
