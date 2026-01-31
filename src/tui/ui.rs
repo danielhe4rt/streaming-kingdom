@@ -23,7 +23,7 @@ pub fn draw(frame: &mut Frame, app: &AppState, tui: &TuiState) {
     draw_toggles(frame, left, app, tui);
     draw_stats(frame, center, app, tui);
     draw_event_log(frame, right, app, tui);
-    draw_status_bar(frame, status_bar);
+    draw_status_bar(frame, status_bar, app);
 }
 
 // ---------------------------------------------------------------------------
@@ -182,10 +182,17 @@ fn format_event(event: &StreamEvent, base: std::time::Instant) -> Line<'static> 
 // Status bar
 // ---------------------------------------------------------------------------
 
-fn draw_status_bar(frame: &mut Frame, area: Rect) {
-    let help = " q: quit | j/k: navigate | Space/Enter: toggle | Tab: switch pane";
-    let bar = Paragraph::new(help).style(Style::default().fg(Color::DarkGray).bg(Color::Black));
-    frame.render_widget(bar, area);
+fn draw_status_bar(frame: &mut Frame, area: Rect, app: &AppState) {
+    if let Some(msg) = &app.status_message {
+        let bar = Paragraph::new(format!(" {msg}"))
+            .style(Style::default().fg(Color::Red).bg(Color::Black));
+        frame.render_widget(bar, area);
+    } else {
+        let help = " q: quit | j/k: navigate | Space/Enter: toggle | Tab: switch pane";
+        let bar =
+            Paragraph::new(help).style(Style::default().fg(Color::DarkGray).bg(Color::Black));
+        frame.render_widget(bar, area);
+    }
 }
 
 // ---------------------------------------------------------------------------

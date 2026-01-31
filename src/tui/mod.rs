@@ -90,6 +90,8 @@ pub async fn run(
         match waybar::spawn(wb_config, wb_style) {
             Ok(child) => Some(child),
             Err(e) => {
+                app.status_message = Some(waybar_error_message(&e));
+                app.waybar_enabled = false;
                 tracing::warn!("failed to spawn waybar: {e}");
                 None
             }
@@ -159,8 +161,15 @@ async fn event_loop(
                 // Spawn waybar
                 if wb_child.is_none() {
                     match waybar::spawn(wb_config, wb_style) {
-                        Ok(child) => *wb_child = Some(child),
-                        Err(e) => tracing::warn!("failed to spawn waybar: {e}"),
+                        Ok(child) => {
+                            *wb_child = Some(child);
+                            app.status_message = None;
+                        }
+                        Err(e) => {
+                            app.status_message = Some(waybar_error_message(&e));
+                            app.waybar_enabled = false;
+                            tracing::warn!("failed to spawn waybar: {e}");
+                        }
                     }
                 }
             } else {
@@ -169,8 +178,17 @@ async fn event_loop(
                     waybar::kill(child).await;
                     *wb_child = None;
                 }
+                app.status_message = None;
             }
             prev_waybar_enabled = app.waybar_enabled;
         }
+    }
+}
+
+fn waybar_error_message(err: &io::Error) -> String {
+    if err.kind() == io::ErrorKind::NotFound {
+        "waybar not found — install waybar to use the bottom bar".into()
+    } else {
+        format!("failed to start waybar: {err}")
     }
 }

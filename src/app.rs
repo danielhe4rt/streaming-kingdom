@@ -122,6 +122,9 @@ pub struct AppState {
 
     // Session start time
     pub started_at: Instant,
+
+    // Transient status/error message shown in the TUI status bar
+    pub status_message: Option<String>,
 }
 
 impl AppState {
@@ -138,6 +141,7 @@ impl AppState {
             command_rx,
             stats: StreamStats::new(),
             started_at: Instant::now(),
+            status_message: None,
         }
     }
 
