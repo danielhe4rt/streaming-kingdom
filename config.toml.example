@@ -1,0 +1,21 @@
+[obs]
+host = "localhost"
+port = 4455
+password = "123123"
+capture_source = "Screen Capture"
+
+[twitch]
+client_id = ""
+oauth_token = ""
+refresh_token = ""
+broadcaster_user_id = ""
+
+[alerts]
+overlay_url = ""
+browser_command = "firefox"
+
+[waybar]
+output = "DP-1"
+
+[privacy]
+sensitive_patterns = [".env", "credentials", ".secret", ".pem", "id_rsa"]
