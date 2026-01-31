@@ -19,57 +19,29 @@ fn omarchy_style_path() -> io::Result<PathBuf> {
 // Stream bar CSS block
 // ---------------------------------------------------------------------------
 
-/// The CSS styles for the stream bottom bar, scoped to the `stream-events`
-/// bar name so they don't conflict with Omarchy's top bar styles.
 fn stream_css() -> String {
     format!(
         r#"{start}
 
-/* Scope all stream-bar rules under window#stream-events */
 window#stream-events {{
     background-color: #090b15;
     color: #ffffff;
+    font-family: "CaskaydiaMono Nerd Font", "Noto Sans", monospace;
+    font-size: 16px;
 }}
 
-window#stream-events * {{
-    font-family: "Monorama SemiBold", "CaskaydiaMono Nerd Font", "Noto Sans", monospace;
-    font-size: 14px;
-}}
-
-/* Remove default padding/margins from stream-bar modules */
-window#stream-events #custom-stream-tag,
-window#stream-events #custom-stream-events {{
-    padding: 0;
-    margin: 0;
-}}
-
-/* --- "Recent Events" tag --- */
 window#stream-events #custom-stream-tag {{
     background-color: #c792ea;
     color: #090b15;
-    font-size: 10px;
-    text-transform: uppercase;
-    padding: 4px 7px 5px 7px;
-    margin-left: 295px;
-    margin-top: -12px;
-    margin-bottom: 4px;
+    font-size: 12px;
+    padding: 2px 8px;
+    margin-right: 12px;
     border-radius: 3px;
-    box-shadow: 0px 25px 25px rgba(0, 0, 0, 0.25);
     font-weight: bold;
 }}
 
-/* --- Event list area --- */
 window#stream-events #custom-stream-events {{
-    padding-left: 24px;
-    padding-right: 48px;
-    font-size: 14px;
-    text-transform: uppercase;
-}}
-
-window#stream-events #custom-stream-events.empty {{
-    /* Hide when no events */
-    padding: 0;
-    margin: 0;
+    padding-left: 8px;
 }}
 
 {end}"#,
@@ -97,7 +69,6 @@ pub fn add_stream_css() -> io::Result<()> {
         )
     })?;
 
-    // Remove any existing stream section first
     let cleaned = remove_section(&existing);
     let new_content = format!("{}\n\n{}\n", cleaned.trim_end(), stream_css());
 
@@ -144,7 +115,6 @@ fn remove_section(content: &str) -> String {
     if let Some(start_idx) = content.find(SECTION_START) {
         if let Some(end_marker_idx) = content[start_idx..].find(SECTION_END) {
             let end_idx = start_idx + end_marker_idx + SECTION_END.len();
-            // Also trim any trailing newlines after the section
             let after = content[end_idx..].trim_start_matches('\n');
             return format!("{}{}", &content[..start_idx], after);
         }

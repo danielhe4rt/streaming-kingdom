@@ -35,10 +35,24 @@ pub fn ensure_data_file() -> io::Result<()> {
         if let Some(parent) = data_path.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::write(&data_path, "[]")?;
+        fs::write(&data_path, SEED_EVENTS)?;
+        tracing::info!("seeded stream data file with sample events");
     }
     Ok(())
 }
+
+/// Sample events so the waybar bar has something to display before real
+/// Twitch events come in. Overwritten as soon as the first real event arrives.
+const SEED_EVENTS: &str = r#"[
+  {"event_type":"follow","username":"rustacean42"},
+  {"event_type":"newSubscriber","username":"ferris_fan"},
+  {"event_type":"cheer","username":"bit_donor","amount":"500"},
+  {"event_type":"giftSubscriber","username":"generous_viewer","amount":"5"},
+  {"event_type":"raid","username":"other_streamer","amount":"150"},
+  {"event_type":"recurringSubscriber","username":"loyal_sub","amount":"12"},
+  {"event_type":"donation","username":"tipper123","amount":"25.00"},
+  {"event_type":"follow","username":"new_viewer99"}
+]"#;
 
 // ---------------------------------------------------------------------------
 // Toggle ON/OFF — merge config/style then restart Omarchy's waybar
