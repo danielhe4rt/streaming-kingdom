@@ -3,12 +3,12 @@ use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
 use serde_json::Value;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, mpsc};
 use tokio::time;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 
-use crate::app::{StreamEvent, SubTier};
+use crate::app::{AppEvent, StreamEvent, SubTier};
 use crate::config::TwitchConfig;
 
 const EVENTSUB_URL: &str = "wss://eventsub.wss.twitch.tv/ws";
@@ -75,25 +75,91 @@ const SUBSCRIPTIONS: &[SubDef] = &[
 pub struct TwitchClient {
     config: TwitchConfig,
     event_tx: broadcast::Sender<StreamEvent>,
+    app_event_tx: mpsc::Sender<AppEvent>,
     http: reqwest::Client,
+    /// App access token obtained via client_credentials flow.
+    app_token: Option<String>,
     /// Track seen message IDs for deduplication.
     seen_ids: HashSet<String>,
 }
 
 impl TwitchClient {
-    pub fn new(config: TwitchConfig, event_tx: broadcast::Sender<StreamEvent>) -> Self {
+    pub fn new(
+        config: TwitchConfig,
+        event_tx: broadcast::Sender<StreamEvent>,
+        app_event_tx: mpsc::Sender<AppEvent>,
+    ) -> Self {
         Self {
             config,
             event_tx,
+            app_event_tx,
             http: reqwest::Client::new(),
+            app_token: None,
             seen_ids: HashSet::new(),
         }
+    }
+
+    /// Obtain an app access token via the client_credentials grant flow.
+    ///
+    /// Requires `client_id` and `client_secret` to be configured.
+    async fn get_app_access_token(&self) -> Result<String, ClientError> {
+        let params = [
+            ("client_id", self.config.client_id.as_str()),
+            ("client_secret", self.config.client_secret.as_str()),
+            ("grant_type", "client_credentials"),
+        ];
+
+        let resp = self
+            .http
+            .post(TOKEN_REFRESH_URL)
+            .form(&params)
+            .send()
+            .await
+            .map_err(|e| ClientError::Http(e.to_string()))?;
+
+        let status = resp.status();
+        let body = resp.text().await.map_err(|e| ClientError::Http(e.to_string()))?;
+
+        if !status.is_success() {
+            return Err(ClientError::Http(format!(
+                "Twitch OAuth returned {status}: {body}"
+            )));
+        }
+
+        let json: Value =
+            serde_json::from_str(&body).map_err(|e| ClientError::Http(e.to_string()))?;
+
+        json["access_token"]
+            .as_str()
+            .map(|s| s.to_string())
+            .ok_or_else(|| ClientError::Http("missing access_token in response".into()))
     }
 
     /// Run the EventSub client forever, reconnecting on failure.
     ///
     /// This is intended to be spawned as a tokio task.
     pub async fn run(mut self) {
+        // If client_secret is configured, obtain an app access token at startup.
+        if !self.config.client_secret.is_empty() {
+            match self.get_app_access_token().await {
+                Ok(token) => {
+                    tracing::info!("Twitch app access token acquired");
+                    let _ = self
+                        .app_event_tx
+                        .send(AppEvent::Info("Twitch app token acquired".into()))
+                        .await;
+                    self.app_token = Some(token);
+                }
+                Err(e) => {
+                    tracing::error!("failed to get Twitch app token: {e}");
+                    let _ = self
+                        .app_event_tx
+                        .send(AppEvent::Error(format!("Twitch app token failed: {e}")))
+                        .await;
+                }
+            }
+        }
+
         let mut delay = INITIAL_RECONNECT_DELAY;
         let mut connect_url = EVENTSUB_URL.to_string();
 
@@ -222,10 +288,15 @@ impl TwitchClient {
                 }
             });
 
+            let token = self
+                .app_token
+                .as_deref()
+                .unwrap_or(&self.config.oauth_token);
+
             let resp = self
                 .http
                 .post(HELIX_SUBSCRIPTIONS_URL)
-                .header("Authorization", format!("Bearer {}", self.config.oauth_token))
+                .header("Authorization", format!("Bearer {token}"))
                 .header("Client-Id", &self.config.client_id)
                 .header("Content-Type", "application/json")
                 .json(&body)

@@ -56,9 +56,6 @@ fn sync_python_files() -> io::Result<()> {
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    // Load .env file (for Livepix/ElevenLabs keys)
-    dotenv::dotenv().ok();
-
     // Sync Python files on startup (project files are source of truth)
     if let Err(e) = sync_python_files() {
         eprintln!("Warning: Failed to sync Python files: {}", e);
@@ -68,8 +65,7 @@ async fn main() -> io::Result<()> {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
-    let mut cfg = config::load().map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
-    cfg.livepix.apply_env_overrides();
+    let cfg = config::load().map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
 
     // Ensure the stream data file exists so waybar custom modules don't fail
     waybar::ensure_data_file()?;
@@ -83,10 +79,18 @@ async fn main() -> io::Result<()> {
     tokio::spawn(waybar::event_writer(event_rx));
 
     // Start the Twitch EventSub WebSocket client (runs in background)
-    if !cfg.twitch.oauth_token.is_empty() && !cfg.twitch.client_id.is_empty() {
-        let twitch = stream::TwitchClient::new(cfg.twitch.clone(), app.event_tx.clone());
+    let (twitch_event_tx, twitch_event_rx) = mpsc::channel::<AppEvent>(64);
+    let has_user_token = !cfg.twitch.oauth_token.is_empty() && !cfg.twitch.client_id.is_empty();
+    let has_app_creds = !cfg.twitch.client_secret.is_empty() && !cfg.twitch.client_id.is_empty();
+
+    if has_user_token || has_app_creds {
+        let twitch = stream::TwitchClient::new(
+            cfg.twitch.clone(),
+            app.event_tx.clone(),
+            twitch_event_tx,
+        );
         tokio::spawn(twitch.run());
-        app.log_event(AppEvent::Info("Twitch EventSub connected".into()));
+        app.log_event(AppEvent::Info("Twitch EventSub connecting".into()));
     } else {
         app.log_event(AppEvent::Info("Twitch not configured".into()));
     }
@@ -134,6 +138,7 @@ async fn main() -> io::Result<()> {
         livepix_status_rx,
         &cfg.event_log,
         hyprland_rx,
+        twitch_event_rx,
     )
     .await
 }

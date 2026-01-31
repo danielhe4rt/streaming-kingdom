@@ -99,6 +99,7 @@ pub async fn run(
     livepix_status_rx: mpsc::Receiver<LivepixStatus>,
     event_log_config: &EventLogConfig,
     mut hyprland_rx: mpsc::Receiver<AppEvent>,
+    mut twitch_event_rx: mpsc::Receiver<AppEvent>,
 ) -> io::Result<()> {
     let mut terminal = init_terminal()?;
     let mut tui = TuiState::new(event_log_config);
@@ -129,6 +130,7 @@ pub async fn run(
         &livepix_cmd_tx,
         &mut livepix_status_rx,
         &mut hyprland_rx,
+        &mut twitch_event_rx,
     )
     .await;
 
@@ -161,6 +163,7 @@ async fn event_loop(
     livepix_cmd_tx: &mpsc::Sender<LivepixCommand>,
     livepix_status_rx: &mut mpsc::Receiver<LivepixStatus>,
     hyprland_rx: &mut mpsc::Receiver<AppEvent>,
+    twitch_event_rx: &mut mpsc::Receiver<AppEvent>,
 ) -> io::Result<()> {
     let mut prev_waybar_enabled = app.waybar_enabled;
     let mut prev_privacy_enabled = app.privacy_enabled;
@@ -258,6 +261,11 @@ async fn event_loop(
 
         // Drain Hyprland events into the event log.
         while let Ok(ev) = hyprland_rx.try_recv() {
+            app.log_event(ev);
+        }
+
+        // Drain Twitch background events into the event log.
+        while let Ok(ev) = twitch_event_rx.try_recv() {
             app.log_event(ev);
         }
 

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::{fs, io};
+use std::{env, fs, io};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
@@ -26,6 +26,8 @@ pub struct ObsConfig {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TwitchConfig {
     pub client_id: String,
+    #[serde(default)]
+    pub client_secret: String,
     pub oauth_token: String,
     pub refresh_token: String,
     pub broadcaster_user_id: String,
@@ -77,19 +79,43 @@ impl LivepixConfig {
     /// Override empty fields with environment variables from .env.
     pub fn apply_env_overrides(&mut self) {
         if self.client_id.is_empty() {
-            if let Ok(val) = std::env::var("LIVEPIX_CLIENT_ID") {
+            if let Ok(val) = env::var("LIVEPIX_CLIENT_ID") {
                 self.client_id = val;
             }
         }
         if self.client_secret.is_empty() {
-            if let Ok(val) = std::env::var("LIVEPIX_CLIENT_SECRET") {
+            if let Ok(val) = env::var("LIVEPIX_CLIENT_SECRET") {
                 self.client_secret = val;
             }
         }
         if self.tts.elevenlabs_api_key.is_empty() {
-            if let Ok(val) = std::env::var("ELEVENLABS_API_KEY") {
+            if let Ok(val) = env::var("ELEVENLABS_API_KEY") {
                 self.tts.elevenlabs_api_key = val;
             }
+        }
+    }
+}
+
+impl TwitchConfig {
+    /// Override fields from environment variables when set.
+    ///
+    /// Env vars: `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`, `TWITCH_OAUTH_TOKEN`,
+    /// `TWITCH_REFRESH_TOKEN`, `TWITCH_BROADCASTER_USER_ID`.
+    pub fn apply_env_overrides(&mut self) {
+        if let Ok(v) = env::var("TWITCH_CLIENT_ID") {
+            self.client_id = v;
+        }
+        if let Ok(v) = env::var("TWITCH_CLIENT_SECRET") {
+            self.client_secret = v;
+        }
+        if let Ok(v) = env::var("TWITCH_OAUTH_TOKEN") {
+            self.oauth_token = v;
+        }
+        if let Ok(v) = env::var("TWITCH_REFRESH_TOKEN") {
+            self.refresh_token = v;
+        }
+        if let Ok(v) = env::var("TWITCH_BROADCASTER_USER_ID") {
+            self.broadcaster_user_id = v;
         }
     }
 }
@@ -139,6 +165,7 @@ impl Default for Config {
             },
             twitch: TwitchConfig {
                 client_id: String::new(),
+                client_secret: String::new(),
                 oauth_token: String::new(),
                 refresh_token: String::new(),
                 broadcaster_user_id: String::new(),
@@ -211,10 +238,13 @@ impl From<toml::ser::Error> for ConfigError {
 
 /// Load config from `~/.config/streams-toolkit/config.toml`.
 /// Creates the default config file if it doesn't exist.
+/// Environment variables (loaded via `.env` file) override config values.
 pub fn load() -> Result<Config, ConfigError> {
+    dotenv::dotenv().ok();
+
     let path = config_path()?;
 
-    if !path.exists() {
+    let mut config = if !path.exists() {
         let default = Config::default();
         let contents = toml::to_string_pretty(&default)?;
         if let Some(parent) = path.parent() {
@@ -222,11 +252,16 @@ pub fn load() -> Result<Config, ConfigError> {
         }
         fs::write(&path, &contents)?;
         tracing::info!("created default config at {}", path.display());
-        return Ok(default);
-    }
+        default
+    } else {
+        let contents = fs::read_to_string(&path)?;
+        let c: Config = toml::from_str(&contents)?;
+        tracing::info!("loaded config from {}", path.display());
+        c
+    };
 
-    let contents = fs::read_to_string(&path)?;
-    let config: Config = toml::from_str(&contents)?;
-    tracing::info!("loaded config from {}", path.display());
+    config.twitch.apply_env_overrides();
+    config.livepix.apply_env_overrides();
+
     Ok(config)
 }
