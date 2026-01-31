@@ -56,6 +56,9 @@ fn sync_python_files() -> io::Result<()> {
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
+    // Load .env file (for Livepix/ElevenLabs keys)
+    dotenv::dotenv().ok();
+
     // Sync Python files on startup (project files are source of truth)
     if let Err(e) = sync_python_files() {
         eprintln!("Warning: Failed to sync Python files: {}", e);
@@ -65,7 +68,8 @@ async fn main() -> io::Result<()> {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
-    let cfg = config::load().map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    let mut cfg = config::load().map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    cfg.livepix.apply_env_overrides();
 
     // Ensure the stream data file exists so waybar custom modules don't fail
     waybar::ensure_data_file()?;

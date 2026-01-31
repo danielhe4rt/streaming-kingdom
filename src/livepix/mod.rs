@@ -115,7 +115,15 @@ async fn get_oauth_token(
         .await
         .map_err(|e| e.to_string())?;
 
-    let token_data: OAuthToken = response.json().await.map_err(|e| e.to_string())?;
+    let status = response.status();
+    let body = response.text().await.map_err(|e| e.to_string())?;
+
+    if !status.is_success() {
+        return Err(format!("OAuth returned {status}: {body}"));
+    }
+
+    let token_data: OAuthToken =
+        serde_json::from_str(&body).map_err(|e| format!("failed to parse OAuth response: {e} -- body: {body}"))?;
 
     Ok(token_data.access_token)
 }
@@ -225,9 +233,24 @@ async fn handle_webhook(
                         .status_tx
                         .send(LivepixStatus::WebhookReceived {
                             username: message.username.clone(),
-                            amount: amount_display,
+                            amount: amount_display.clone(),
                         })
                         .await;
+
+                    // Desktop notification via notify-send
+                    let title = format!("Donation — {}", amount_display);
+                    let body = format!(
+                        "<b>{}</b> donated <b>{}</b>\n\"{}\"",
+                        message.username, amount_display, message.message
+                    );
+                    let _ = std::process::Command::new("notify-send")
+                        .arg("--app-name=streams-toolkit")
+                        .arg("--urgency=critical")
+                        .arg("--expire-time=12000")
+                        .arg("--category=stream.donate")
+                        .arg(&title)
+                        .arg(&body)
+                        .spawn();
 
                     // Forward to TTS (non-blocking)
                     if let Some(ref tts_tx) = state_clone.tts_tx {
