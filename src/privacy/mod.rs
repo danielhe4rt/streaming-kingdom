@@ -32,8 +32,8 @@ pub enum PrivacyStatus {
 // OBS blur helpers
 // ---------------------------------------------------------------------------
 
-const FILTER_NAME: &str = "privacy-blur";
-const FILTER_KIND: &str = "scroll_filter";
+const FILTER_NAME: &str = "Composite Blur";
+const FILTER_KIND: &str = "obs_composite_blur";
 
 /// Try to connect to OBS. Returns `None` (with a logged warning) when OBS
 /// isn't running or the connection is refused – this is expected during normal
@@ -66,7 +66,7 @@ async fn enable_blur(client: &obws::Client, capture_source: &str) {
     match client.filters().get(source, FILTER_NAME).await {
         Ok(existing) => {
             if !existing.enabled {
-                let req = obws::requests::filters::SetEnabled {
+                let req: obws::requests::filters::SetEnabled<'_> = obws::requests::filters::SetEnabled {
                     source,
                     filter: FILTER_NAME,
                     enabled: true,

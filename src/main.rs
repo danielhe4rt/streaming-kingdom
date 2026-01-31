@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use tokio::sync::mpsc;
 
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main]
 async fn main() -> io::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
@@ -26,12 +26,12 @@ async fn main() -> io::Result<()> {
 
     // Start the waybar event-writer task (writes stream_data.json on each event)
     let event_rx = app.subscribe_events();
-    tokio::task::spawn_local(waybar::event_writer(event_rx));
+    tokio::spawn(waybar::event_writer(event_rx));
 
     // Start the Twitch EventSub WebSocket client (runs in background)
     if !cfg.twitch.oauth_token.is_empty() && !cfg.twitch.client_id.is_empty() {
         let twitch = stream::TwitchClient::new(cfg.twitch.clone(), app.event_tx.clone());
-        tokio::task::spawn_local(twitch.run());
+        tokio::spawn(twitch.run());
         tracing::info!("twitch EventSub client started");
     } else {
         tracing::warn!("twitch config incomplete — EventSub client not started");
