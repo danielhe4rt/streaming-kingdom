@@ -2,14 +2,17 @@ mod input;
 mod ui;
 
 use std::io::{self, Stdout};
+use std::path::PathBuf;
 use std::time::Duration;
 
 use crossterm::event::{self, Event};
 use ratatui::prelude::*;
 use ratatui::Terminal;
+use tokio::process::Child;
 use tokio::sync::{broadcast, mpsc};
 
 use crate::app::{AppState, FeatureCommand, StreamEvent};
+use crate::waybar;
 
 // ---------------------------------------------------------------------------
 // TUI state that lives alongside (not inside) AppState
@@ -72,13 +75,45 @@ fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> io::Re
 
 const TICK: Duration = Duration::from_millis(33); // ~30 fps
 
-pub async fn run(app: &mut AppState) -> io::Result<()> {
+pub async fn run(
+    app: &mut AppState,
+    wb_config: &PathBuf,
+    wb_style: &PathBuf,
+) -> io::Result<()> {
     let mut terminal = init_terminal()?;
     let mut tui = TuiState::new();
     let mut event_rx = app.subscribe_events();
     let cmd_tx = app.command_sender();
 
-    let result = event_loop(&mut terminal, app, &mut tui, &mut event_rx, &cmd_tx).await;
+    // Spawn waybar if it starts enabled
+    let mut wb_child: Option<Child> = if app.waybar_enabled {
+        match waybar::spawn(wb_config, wb_style) {
+            Ok(child) => Some(child),
+            Err(e) => {
+                tracing::warn!("failed to spawn waybar: {e}");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    let result = event_loop(
+        &mut terminal,
+        app,
+        &mut tui,
+        &mut event_rx,
+        &cmd_tx,
+        &mut wb_child,
+        wb_config,
+        wb_style,
+    )
+    .await;
+
+    // Clean up waybar on exit
+    if let Some(child) = &mut wb_child {
+        waybar::kill(child).await;
+    }
 
     restore_terminal(&mut terminal)?;
     result
@@ -90,7 +125,12 @@ async fn event_loop(
     tui: &mut TuiState,
     event_rx: &mut broadcast::Receiver<StreamEvent>,
     cmd_tx: &mpsc::Sender<FeatureCommand>,
+    wb_child: &mut Option<Child>,
+    wb_config: &PathBuf,
+    wb_style: &PathBuf,
 ) -> io::Result<()> {
+    let mut prev_waybar_enabled = app.waybar_enabled;
+
     loop {
         // Draw
         terminal.draw(|frame| ui::draw(frame, app, tui))?;
@@ -112,5 +152,25 @@ async fn event_loop(
 
         // Process any pending feature commands.
         app.process_pending_commands();
+
+        // React to waybar toggle changes
+        if app.waybar_enabled != prev_waybar_enabled {
+            if app.waybar_enabled {
+                // Spawn waybar
+                if wb_child.is_none() {
+                    match waybar::spawn(wb_config, wb_style) {
+                        Ok(child) => *wb_child = Some(child),
+                        Err(e) => tracing::warn!("failed to spawn waybar: {e}"),
+                    }
+                }
+            } else {
+                // Kill waybar
+                if let Some(child) = wb_child {
+                    waybar::kill(child).await;
+                    *wb_child = None;
+                }
+            }
+            prev_waybar_enabled = app.waybar_enabled;
+        }
     }
 }

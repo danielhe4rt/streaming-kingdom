@@ -1,3 +1,4 @@
+use serde::Serialize;
 use std::time::Instant;
 use tokio::sync::{broadcast, mpsc};
 
@@ -5,7 +6,8 @@ use tokio::sync::{broadcast, mpsc};
 // Stream events – one producer (stream listener), N consumer modules
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
 pub enum StreamEvent {
     Follow {
         username: String,
@@ -34,7 +36,8 @@ pub enum StreamEvent {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub enum SubTier {
     Tier1,
     Tier2,
