@@ -1,3 +1,5 @@
+pub mod tts;
+
 use std::sync::Arc;
 
 use axum::extract::State;
@@ -10,6 +12,8 @@ use tokio::sync::{broadcast, mpsc, Mutex};
 
 use crate::app::StreamEvent;
 use crate::config::LivepixConfig;
+
+pub use tts::TtsRequest;
 
 // ---------------------------------------------------------------------------
 // Commands & status messages exchanged with the TUI
@@ -29,16 +33,6 @@ pub enum LivepixStatus {
     OAuthError(String),
     WebhookReceived { username: String, amount: String },
     Error(String),
-}
-
-// ---------------------------------------------------------------------------
-// TTS request forwarded to an external consumer
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone)]
-pub struct TtsRequest {
-    pub text: String,
-    pub username: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -237,12 +231,15 @@ async fn handle_webhook(
 
                     // Forward to TTS (non-blocking)
                     if let Some(ref tts_tx) = state_clone.tts_tx {
-                        let _ = tts_tx
-                            .send(TtsRequest {
+                        if tts_tx
+                            .try_send(TtsRequest {
                                 text: message.message,
                                 username: message.username,
                             })
-                            .await;
+                            .is_err()
+                        {
+                            tracing::warn!("TTS queue full, dropping request");
+                        }
                     }
                 }
                 Err(e) => {

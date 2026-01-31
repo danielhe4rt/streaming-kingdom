@@ -101,6 +101,9 @@ async fn main() -> io::Result<()> {
         Arc::from(cfg.obs.capture_source.as_str()),
     );
 
+    // Spawn TTS worker (returns None if API key is empty)
+    let tts_tx = livepix::tts::spawn(cfg.livepix.tts.clone());
+
     // Create Livepix webhook server channels and spawn its task
     let (livepix_cmd_tx, livepix_cmd_rx) = mpsc::channel::<livepix::LivepixCommand>(16);
     let (livepix_status_tx, livepix_status_rx) = mpsc::channel::<livepix::LivepixStatus>(64);
@@ -109,7 +112,7 @@ async fn main() -> io::Result<()> {
         livepix_cmd_rx,
         livepix_status_tx,
         app.event_tx.clone(),
-        None, // TTS sender - wire up when TTS module is implemented
+        tts_tx,
         cfg.livepix.clone(),
     );
 
