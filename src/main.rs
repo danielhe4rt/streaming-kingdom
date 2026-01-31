@@ -79,11 +79,10 @@ async fn main() -> io::Result<()> {
     tokio::spawn(waybar::event_writer(event_rx));
 
     // Start the Twitch EventSub WebSocket client (runs in background)
+    // WebSocket transport requires a user access token — app tokens won't work.
     let (twitch_event_tx, twitch_event_rx) = mpsc::channel::<AppEvent>(64);
-    let has_user_token = !cfg.twitch.oauth_token.is_empty() && !cfg.twitch.client_id.is_empty();
-    let has_app_creds = !cfg.twitch.client_secret.is_empty() && !cfg.twitch.client_id.is_empty();
 
-    if has_user_token || has_app_creds {
+    if !cfg.twitch.oauth_token.is_empty() && !cfg.twitch.client_id.is_empty() {
         let twitch = stream::TwitchClient::new(
             cfg.twitch.clone(),
             app.event_tx.clone(),
@@ -92,7 +91,7 @@ async fn main() -> io::Result<()> {
         tokio::spawn(twitch.run());
         app.log_event(AppEvent::Info("Twitch EventSub connecting".into()));
     } else {
-        app.log_event(AppEvent::Info("Twitch not configured".into()));
+        app.log_event(AppEvent::Info("Twitch not configured (need oauth_token + client_id)".into()));
     }
 
     // Create privacy monitor channels and spawn its task
