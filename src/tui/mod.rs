@@ -11,6 +11,7 @@ use tokio::sync::{broadcast, mpsc};
 
 use crate::app::{AppEvent, AppState, FeatureCommand, StreamEvent};
 use crate::config::EventLogConfig;
+use crate::livepix::{LivepixCommand, LivepixStatus};
 use crate::privacy::{PrivacyCommand, PrivacyStatus};
 use crate::waybar;
 
@@ -94,6 +95,8 @@ pub async fn run(
     waybar_output: &str,
     privacy_cmd_tx: mpsc::Sender<PrivacyCommand>,
     privacy_status_rx: mpsc::Receiver<PrivacyStatus>,
+    livepix_cmd_tx: mpsc::Sender<LivepixCommand>,
+    livepix_status_rx: mpsc::Receiver<LivepixStatus>,
     event_log_config: &EventLogConfig,
     mut hyprland_rx: mpsc::Receiver<AppEvent>,
 ) -> io::Result<()> {
@@ -112,6 +115,7 @@ pub async fn run(
     }
 
     let mut privacy_status_rx = privacy_status_rx;
+    let mut livepix_status_rx = livepix_status_rx;
 
     let result = event_loop(
         &mut terminal,
@@ -122,12 +126,17 @@ pub async fn run(
         waybar_output,
         &privacy_cmd_tx,
         &mut privacy_status_rx,
+        &livepix_cmd_tx,
+        &mut livepix_status_rx,
         &mut hyprland_rx,
     )
     .await;
 
     // Send Stop to privacy monitor for clean shutdown
     let _ = privacy_cmd_tx.send(PrivacyCommand::Stop).await;
+
+    // Send Stop to Livepix for clean shutdown
+    let _ = livepix_cmd_tx.send(LivepixCommand::Stop).await;
 
     // Clean up stream bar from waybar config on exit
     if app.waybar_enabled {
@@ -149,10 +158,13 @@ async fn event_loop(
     waybar_output: &str,
     privacy_cmd_tx: &mpsc::Sender<PrivacyCommand>,
     privacy_status_rx: &mut mpsc::Receiver<PrivacyStatus>,
+    livepix_cmd_tx: &mpsc::Sender<LivepixCommand>,
+    livepix_status_rx: &mut mpsc::Receiver<LivepixStatus>,
     hyprland_rx: &mut mpsc::Receiver<AppEvent>,
 ) -> io::Result<()> {
     let mut prev_waybar_enabled = app.waybar_enabled;
     let mut prev_privacy_enabled = app.privacy_enabled;
+    let mut prev_livepix_enabled = app.livepix_enabled;
 
     loop {
         // Draw
@@ -204,6 +216,46 @@ async fn event_loop(
             }
         }
 
+        // Drain Livepix status updates — log each and keep latest for display.
+        while let Ok(status) = livepix_status_rx.try_recv() {
+            tui.livepix_status = Some(match &status {
+                LivepixStatus::Running { port } => format!("listening :{port}"),
+                LivepixStatus::Stopped => "stopped".into(),
+                LivepixStatus::OAuthSuccess => "authenticated".into(),
+                LivepixStatus::OAuthError(msg) => format!("auth error: {msg}"),
+                LivepixStatus::WebhookReceived { username, amount } => {
+                    format!("{username}: {amount}")
+                }
+                LivepixStatus::Error(msg) => format!("error: {msg}"),
+            });
+
+            // Log to unified event log so user can see everything.
+            match &status {
+                LivepixStatus::Running { port } => {
+                    app.log_event(AppEvent::Info(format!(
+                        "Livepix webhook listening on 127.0.0.1:{port}"
+                    )));
+                }
+                LivepixStatus::Stopped => {
+                    app.log_event(AppEvent::Info("Livepix webhook stopped".into()));
+                }
+                LivepixStatus::OAuthSuccess => {
+                    app.log_event(AppEvent::Info("Livepix OAuth authenticated".into()));
+                }
+                LivepixStatus::OAuthError(msg) => {
+                    app.log_event(AppEvent::Error(format!("Livepix OAuth failed: {msg}")));
+                }
+                LivepixStatus::WebhookReceived { username, amount } => {
+                    app.log_event(AppEvent::Info(format!(
+                        "Livepix: {username} donated {amount}"
+                    )));
+                }
+                LivepixStatus::Error(msg) => {
+                    app.log_event(AppEvent::Error(format!("Livepix: {msg}")));
+                }
+            }
+        }
+
         // Drain Hyprland events into the event log.
         while let Ok(ev) = hyprland_rx.try_recv() {
             app.log_event(ev);
@@ -250,6 +302,18 @@ async fn event_loop(
             };
             let _ = privacy_cmd_tx.send(cmd).await;
             prev_privacy_enabled = app.privacy_enabled;
+        }
+
+        // React to Livepix toggle changes
+        if app.livepix_enabled != prev_livepix_enabled {
+            let cmd = if app.livepix_enabled {
+                LivepixCommand::Start
+            } else {
+                tui.livepix_status = None;
+                LivepixCommand::Stop
+            };
+            let _ = livepix_cmd_tx.send(cmd).await;
+            prev_livepix_enabled = app.livepix_enabled;
         }
     }
 }

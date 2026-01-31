@@ -126,6 +126,8 @@ async fn main() -> io::Result<()> {
         &cfg.waybar.output,
         privacy_cmd_tx,
         privacy_status_rx,
+        livepix_cmd_tx,
+        livepix_status_rx,
         &cfg.event_log,
         hyprland_rx,
     )
