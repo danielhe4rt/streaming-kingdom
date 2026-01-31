@@ -80,7 +80,7 @@ impl StreamStats {
         }
     }
 
-    fn record(&mut self, event: &StreamEvent) {
+    pub fn record(&mut self, event: &StreamEvent) {
         match event {
             StreamEvent::Follow { .. } => self.followers_today += 1,
             StreamEvent::Sub { .. } => self.subs_today += 1,
