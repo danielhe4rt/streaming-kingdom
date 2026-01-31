@@ -2,6 +2,7 @@ mod alerts;
 mod app;
 mod config;
 mod hyprland;
+mod livepix;
 mod privacy;
 mod stream;
 mod tui;
@@ -98,6 +99,18 @@ async fn main() -> io::Result<()> {
         cfg.obs.port,
         Arc::from(cfg.obs.password.as_str()),
         Arc::from(cfg.obs.capture_source.as_str()),
+    );
+
+    // Create Livepix webhook server channels and spawn its task
+    let (livepix_cmd_tx, livepix_cmd_rx) = mpsc::channel::<livepix::LivepixCommand>(16);
+    let (livepix_status_tx, livepix_status_rx) = mpsc::channel::<livepix::LivepixStatus>(64);
+
+    let _livepix_handle = livepix::spawn(
+        livepix_cmd_rx,
+        livepix_status_tx,
+        app.event_tx.clone(),
+        None, // TTS sender - wire up when TTS module is implemented
+        cfg.livepix.clone(),
     );
 
     // Spawn Hyprland event listener for the event log
