@@ -1,7 +1,7 @@
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, Wrap};
 
-use crate::app::{AppState, StreamEvent};
+use crate::app::{AppEvent, AppEventEntry, AppState, EventGroup, StreamEvent};
 use super::{Pane, TuiState};
 
 const TOGGLE_LABELS: [&str; 3] = ["Waybar", "Privacy Monitor", "Alerts Browser"];
@@ -117,15 +117,14 @@ fn draw_stats(frame: &mut Frame, area: Rect, app: &AppState, tui: &TuiState) {
 
 fn draw_event_log(frame: &mut Frame, area: Rect, app: &AppState, tui: &TuiState) {
     let focused = tui.focused_pane == Pane::EventLog;
-    let block = make_block("Event Log", focused);
+    let block = make_event_log_block(focused, tui);
 
-    let uptime_base = app.started_at;
     let lines: Vec<Line> = app
-        .stats
-        .last_events
+        .event_log
         .iter()
         .rev()
-        .map(|ev| format_event(ev, uptime_base))
+        .filter(|entry| is_group_visible(entry.event.group(), tui))
+        .map(|entry| format_app_event(entry))
         .collect();
 
     let paragraph = Paragraph::new(lines)
@@ -136,61 +135,220 @@ fn draw_event_log(frame: &mut Frame, area: Rect, app: &AppState, tui: &TuiState)
     frame.render_widget(paragraph, area);
 }
 
-fn format_event(event: &StreamEvent, base: std::time::Instant) -> Line<'static> {
-    let elapsed = base.elapsed();
-    let ts = format!(
-        "{:02}:{:02}:{:02}",
-        elapsed.as_secs() / 3600,
-        (elapsed.as_secs() % 3600) / 60,
-        elapsed.as_secs() % 60
-    );
+fn is_group_visible(group: EventGroup, tui: &TuiState) -> bool {
+    match group {
+        EventGroup::Stream => tui.filter_stream,
+        EventGroup::Privacy => tui.filter_privacy,
+        EventGroup::System => tui.filter_system,
+        EventGroup::Hyprland => tui.filter_hyprland,
+    }
+}
 
-    let (icon, body) = match event {
-        StreamEvent::Follow { username } => ("♥", format!("{username} followed")),
-        StreamEvent::Sub {
-            username,
-            tier,
-            months,
-        } => (
-            "★",
-            format!("{username} subbed ({tier:?}, {months}mo)"),
-        ),
-        StreamEvent::GiftSub {
-            username,
-            tier,
-            total,
-        } => (
-            "🎁",
-            format!("{username} gifted {total} subs ({tier:?})"),
-        ),
-        StreamEvent::Donation {
-            username,
-            amount_cents,
-            message,
-        } => (
-            "$",
-            format!(
-                "{username} donated ${:.2}: {message}",
-                *amount_cents as f64 / 100.0
+/// Build the Event Log block with filter legend in the title.
+fn make_event_log_block(focused: bool, tui: &TuiState) -> Block<'static> {
+    let border_style = if focused {
+        Style::default().fg(Color::Cyan)
+    } else {
+        Style::default().fg(Color::DarkGray)
+    };
+
+    let on_style = Style::default().fg(Color::Green).add_modifier(Modifier::BOLD);
+    let off_style = Style::default().fg(Color::DarkGray);
+
+    let filter_labels = [
+        ("S", tui.filter_stream),
+        ("P", tui.filter_privacy),
+        ("Sys", tui.filter_system),
+        ("H", tui.filter_hyprland),
+    ];
+
+    let mut title_spans: Vec<Span> = vec![Span::raw(" Event Log ")];
+    for (label, active) in filter_labels {
+        let style = if active { on_style } else { off_style };
+        title_spans.push(Span::styled(format!("[{label}]"), style));
+        title_spans.push(Span::raw(" "));
+    }
+
+    Block::default()
+        .title(Line::from(title_spans))
+        .borders(Borders::ALL)
+        .border_style(border_style)
+}
+
+// ---------------------------------------------------------------------------
+// Color constants (Material Palenight palette)
+// ---------------------------------------------------------------------------
+
+const COLOR_FOLLOW: Color = Color::Rgb(0x67, 0x6e, 0x95);
+const COLOR_SUB: Color = Color::Rgb(0xc7, 0x92, 0xea);
+const COLOR_GIFTSUB: Color = Color::Rgb(0x89, 0xdd, 0xff);
+const COLOR_CHEER: Color = Color::Rgb(0xff, 0xcb, 0x6b);
+const COLOR_RAID: Color = Color::Rgb(0xf0, 0x71, 0x78);
+const COLOR_DONATION: Color = Color::Rgb(0xf7, 0x8c, 0x6c);
+const COLOR_BLUR_ON: Color = Color::Rgb(0xff, 0x53, 0x70);
+const COLOR_BLUR_OFF: Color = Color::Rgb(0xc3, 0xe8, 0x8d);
+const COLOR_WARN: Color = Color::Rgb(0xf7, 0x8c, 0x6c);
+const COLOR_TOGGLE_ON: Color = Color::Rgb(0xc3, 0xe8, 0x8d);
+const COLOR_TOGGLE_OFF: Color = Color::Rgb(0x67, 0x6e, 0x95);
+const COLOR_INFO: Color = Color::Rgb(0x82, 0xaa, 0xff);
+const COLOR_ERROR: Color = Color::Rgb(0xff, 0x53, 0x70);
+const COLOR_WINDOW_OPEN: Color = Color::Rgb(0xc3, 0xe8, 0x8d);
+const COLOR_WINDOW_CLOSE: Color = Color::Rgb(0x67, 0x6e, 0x95);
+const COLOR_TITLE_CHANGE: Color = Color::Rgb(0x82, 0xaa, 0xff);
+const COLOR_WORKSPACE: Color = Color::Rgb(0xc7, 0x92, 0xea);
+const COLOR_MONITOR: Color = Color::Rgb(0xff, 0xcb, 0x6b);
+
+fn format_app_event(entry: &AppEventEntry) -> Line<'static> {
+    let secs = entry.elapsed.as_secs();
+    let ts = format!("{:02}:{:02}:{:02}", secs / 3600, (secs % 3600) / 60, secs % 60);
+
+    let (icon, color, body) = match &entry.event {
+        // --- Stream group ---
+        AppEvent::Stream(stream_event) => match stream_event {
+            StreamEvent::Follow { username } => (
+                "♥",
+                COLOR_FOLLOW,
+                format!("{username} followed"),
             ),
+            StreamEvent::Sub { username, tier, months } => (
+                "★",
+                COLOR_SUB,
+                format!("{username} subbed ({tier:?}, {months}mo)"),
+            ),
+            StreamEvent::GiftSub { username, tier, total } => (
+                "🎁",
+                COLOR_GIFTSUB,
+                format!("{username} gifted {total} subs ({tier:?})"),
+            ),
+            StreamEvent::Donation { username, amount_cents, message } => (
+                "$",
+                COLOR_DONATION,
+                format!("{username} donated ${:.2}: {message}", *amount_cents as f64 / 100.0),
+            ),
+            StreamEvent::Cheer { username, bits, message } => (
+                "◆",
+                COLOR_CHEER,
+                format!("{username} cheered {bits} bits: {message}"),
+            ),
+            StreamEvent::Raid { from_channel, viewers } => (
+                "⚡",
+                COLOR_RAID,
+                format!("{from_channel} raided with {viewers} viewers"),
+            ),
+            StreamEvent::ViewerCountUpdate { count } => (
+                "👁",
+                COLOR_INFO,
+                format!("Viewers updated to {count}"),
+            ),
+        },
+
+        // --- Privacy group ---
+        AppEvent::PrivacyBlurEnabled { title } => (
+            "🔒",
+            COLOR_BLUR_ON,
+            format!("Blur ON: {title}"),
         ),
-        StreamEvent::Cheer {
-            username,
-            bits,
-            message,
-        } => ("◆", format!("{username} cheered {bits} bits: {message}")),
-        StreamEvent::Raid {
-            from_channel,
-            viewers,
-        } => ("⚡", format!("{from_channel} raided with {viewers} viewers")),
-        StreamEvent::ViewerCountUpdate { count } => {
-            ("👁", format!("Viewers updated to {count}"))
+        AppEvent::PrivacyBlurDisabled => (
+            "🔓",
+            COLOR_BLUR_OFF,
+            "Blur OFF".into(),
+        ),
+        AppEvent::PrivacyStarted => (
+            "▶",
+            COLOR_TOGGLE_ON,
+            "Privacy monitor started".into(),
+        ),
+        AppEvent::PrivacyStopped => (
+            "■",
+            COLOR_TOGGLE_OFF,
+            "Privacy monitor stopped".into(),
+        ),
+        AppEvent::PrivacyError(msg) => (
+            "⚠",
+            COLOR_WARN,
+            format!("{msg}"),
+        ),
+
+        // --- System group ---
+        AppEvent::FeatureToggled { feature, enabled } => {
+            if *enabled {
+                ("●", COLOR_TOGGLE_ON, format!("{feature} enabled"))
+            } else {
+                ("○", COLOR_TOGGLE_OFF, format!("{feature} disabled"))
+            }
         }
+        AppEvent::WaybarSpawned => (
+            "▶",
+            COLOR_INFO,
+            "Waybar started".into(),
+        ),
+        AppEvent::WaybarKilled => (
+            "■",
+            COLOR_TOGGLE_OFF,
+            "Waybar stopped".into(),
+        ),
+        AppEvent::WaybarError(msg) => (
+            "✖",
+            COLOR_ERROR,
+            format!("{msg}"),
+        ),
+        AppEvent::AlertsBrowserOpened => (
+            "▶",
+            COLOR_INFO,
+            "Alerts browser opened".into(),
+        ),
+        AppEvent::AlertsBrowserClosed => (
+            "■",
+            COLOR_TOGGLE_OFF,
+            "Alerts browser closed".into(),
+        ),
+        AppEvent::Info(msg) => (
+            "ℹ",
+            COLOR_INFO,
+            msg.clone(),
+        ),
+        AppEvent::Error(msg) => (
+            "✖",
+            COLOR_ERROR,
+            msg.clone(),
+        ),
+
+        // --- Hyprland group ---
+        AppEvent::WindowOpened { title, .. } => (
+            "＋",
+            COLOR_WINDOW_OPEN,
+            format!("Window: {title}"),
+        ),
+        AppEvent::WindowClosed { address } => (
+            "✕",
+            COLOR_WINDOW_CLOSE,
+            format!("Window closed: {}", &address[..address.len().min(8)]),
+        ),
+        AppEvent::WindowTitleChanged { title, .. } => (
+            "↔",
+            COLOR_TITLE_CHANGE,
+            format!("Title: {title}"),
+        ),
+        AppEvent::WorkspaceChanged { name } => (
+            "⊞",
+            COLOR_WORKSPACE,
+            format!("Workspace: {name}"),
+        ),
+        AppEvent::MonitorFocused { monitor } => (
+            "◉",
+            COLOR_MONITOR,
+            format!("Monitor: {monitor}"),
+        ),
+        AppEvent::WindowMoved { workspace, .. } => (
+            "↔",
+            COLOR_INFO,
+            format!("Window moved to {workspace}"),
+        ),
     };
 
     Line::from(vec![
         Span::styled(format!("[{ts}] "), Style::default().fg(Color::DarkGray)),
-        Span::styled(format!("{icon} "), Style::default().fg(Color::Yellow)),
+        Span::styled(format!("{icon} "), Style::default().fg(color)),
         Span::raw(body),
     ])
 }
@@ -205,7 +363,7 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &AppState) {
             .style(Style::default().fg(Color::Red).bg(Color::Black));
         frame.render_widget(bar, area);
     } else {
-        let help = " q: quit | j/k: navigate | Space/Enter: toggle | Tab: switch pane";
+        let help = " q: quit | j/k: navigate | Space/Enter: toggle | Tab: switch pane | 1-4: filter events";
         let bar =
             Paragraph::new(help).style(Style::default().fg(Color::DarkGray).bg(Color::Black));
         frame.render_widget(bar, area);

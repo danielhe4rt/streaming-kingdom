@@ -19,3 +19,10 @@ output = "DP-1"
 
 [privacy]
 sensitive_patterns = [".env", "credentials", ".secret", ".pem", "id_rsa"]
+
+[event_log]
+show_stream = true
+show_privacy = true
+show_system = true
+show_hyprland = false
+max_events = 100

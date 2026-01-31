@@ -9,7 +9,8 @@ use ratatui::prelude::*;
 use ratatui::Terminal;
 use tokio::sync::{broadcast, mpsc};
 
-use crate::app::{AppState, FeatureCommand, StreamEvent};
+use crate::app::{AppEvent, AppState, FeatureCommand, StreamEvent};
+use crate::config::EventLogConfig;
 use crate::privacy::{PrivacyCommand, PrivacyStatus};
 use crate::waybar;
 
@@ -39,15 +40,25 @@ pub struct TuiState {
     pub toggle_cursor: usize,
     pub event_log_scroll: u16,
     pub privacy_status: Option<String>,
+
+    // Event log group filters (true = visible)
+    pub filter_stream: bool,
+    pub filter_privacy: bool,
+    pub filter_system: bool,
+    pub filter_hyprland: bool,
 }
 
 impl TuiState {
-    fn new() -> Self {
+    fn new(event_log_config: &EventLogConfig) -> Self {
         Self {
             focused_pane: Pane::Toggles,
             toggle_cursor: 0,
             event_log_scroll: 0,
             privacy_status: None,
+            filter_stream: event_log_config.show_stream,
+            filter_privacy: event_log_config.show_privacy,
+            filter_system: event_log_config.show_system,
+            filter_hyprland: event_log_config.show_hyprland,
         }
     }
 }
@@ -81,9 +92,11 @@ pub async fn run(
     waybar_output: &str,
     privacy_cmd_tx: mpsc::Sender<PrivacyCommand>,
     privacy_status_rx: mpsc::Receiver<PrivacyStatus>,
+    event_log_config: &EventLogConfig,
+    mut hyprland_rx: mpsc::Receiver<AppEvent>,
 ) -> io::Result<()> {
     let mut terminal = init_terminal()?;
-    let mut tui = TuiState::new();
+    let mut tui = TuiState::new(event_log_config);
     let mut event_rx = app.subscribe_events();
     let cmd_tx = app.command_sender();
 
@@ -107,6 +120,7 @@ pub async fn run(
         waybar_output,
         &privacy_cmd_tx,
         &mut privacy_status_rx,
+        &mut hyprland_rx,
     )
     .await;
 
@@ -133,6 +147,7 @@ async fn event_loop(
     waybar_output: &str,
     privacy_cmd_tx: &mpsc::Sender<PrivacyCommand>,
     privacy_status_rx: &mut mpsc::Receiver<PrivacyStatus>,
+    hyprland_rx: &mut mpsc::Receiver<AppEvent>,
 ) -> io::Result<()> {
     let mut prev_waybar_enabled = app.waybar_enabled;
     let mut prev_privacy_enabled = app.privacy_enabled;
@@ -154,9 +169,10 @@ async fn event_loop(
         // Drain any pending stream events into stats / event log.
         while let Ok(ev) = event_rx.try_recv() {
             app.stats.record(&ev);
+            app.log_event(AppEvent::Stream(ev));
         }
 
-        // Drain privacy status updates, keeping only the latest.
+        // Drain privacy status updates — log each and keep latest for display.
         while let Ok(status) = privacy_status_rx.try_recv() {
             tui.privacy_status = Some(match &status {
                 PrivacyStatus::Running => "running".into(),
@@ -165,6 +181,30 @@ async fn event_loop(
                 PrivacyStatus::BlurDisabled => "blur off".into(),
                 PrivacyStatus::Error(msg) => format!("error: {msg}"),
             });
+
+            // Log privacy events to the unified event log.
+            match status {
+                PrivacyStatus::Running => {
+                    app.log_event(AppEvent::PrivacyStarted);
+                }
+                PrivacyStatus::Stopped => {
+                    app.log_event(AppEvent::PrivacyStopped);
+                }
+                PrivacyStatus::BlurEnabled { title } => {
+                    app.log_event(AppEvent::PrivacyBlurEnabled { title });
+                }
+                PrivacyStatus::BlurDisabled => {
+                    app.log_event(AppEvent::PrivacyBlurDisabled);
+                }
+                PrivacyStatus::Error(msg) => {
+                    app.log_event(AppEvent::PrivacyError(msg));
+                }
+            }
+        }
+
+        // Drain Hyprland events into the event log.
+        while let Ok(ev) = hyprland_rx.try_recv() {
+            app.log_event(ev);
         }
 
         // Process any pending feature commands.
@@ -177,9 +217,12 @@ async fn event_loop(
                 match waybar::enable(waybar_output).await {
                     Ok(()) => {
                         app.status_message = None;
+                        app.log_event(AppEvent::WaybarSpawned);
                     }
                     Err(e) => {
-                        app.status_message = Some(waybar_error_message(&e));
+                        let msg = waybar_error_message(&e);
+                        app.log_event(AppEvent::WaybarError(msg.clone()));
+                        app.status_message = Some(msg);
                         app.waybar_enabled = false;
                         tracing::warn!("failed to enable waybar stream bar: {e}");
                     }
@@ -189,6 +232,7 @@ async fn event_loop(
                 if let Err(e) = waybar::disable().await {
                     tracing::warn!("failed to disable waybar stream bar: {e}");
                 }
+                app.log_event(AppEvent::WaybarKilled);
                 app.status_message = None;
             }
             prev_waybar_enabled = app.waybar_enabled;

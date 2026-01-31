@@ -1,6 +1,7 @@
 mod alerts;
 mod app;
 mod config;
+mod hyprland;
 mod privacy;
 mod stream;
 mod tui;
@@ -10,6 +11,8 @@ use std::io;
 use std::sync::Arc;
 
 use tokio::sync::mpsc;
+
+use app::AppEvent;
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
@@ -22,7 +25,9 @@ async fn main() -> io::Result<()> {
     // Ensure the stream data file exists so waybar custom modules don't fail
     waybar::ensure_data_file()?;
 
-    let mut app = app::AppState::new();
+    let mut app = app::AppState::new(&cfg.event_log);
+    app.log_event(AppEvent::Info("streams-toolkit started".into()));
+    app.log_event(AppEvent::Info("Config loaded".into()));
 
     // Start the waybar event-writer task (writes stream_data.json on each event)
     let event_rx = app.subscribe_events();
@@ -32,9 +37,9 @@ async fn main() -> io::Result<()> {
     if !cfg.twitch.oauth_token.is_empty() && !cfg.twitch.client_id.is_empty() {
         let twitch = stream::TwitchClient::new(cfg.twitch.clone(), app.event_tx.clone());
         tokio::spawn(twitch.run());
-        tracing::info!("twitch EventSub client started");
+        app.log_event(AppEvent::Info("Twitch EventSub connected".into()));
     } else {
-        tracing::warn!("twitch config incomplete — EventSub client not started");
+        app.log_event(AppEvent::Info("Twitch not configured".into()));
     }
 
     // Create privacy monitor channels and spawn its task
@@ -51,6 +56,18 @@ async fn main() -> io::Result<()> {
         Arc::from(cfg.obs.capture_source.as_str()),
     );
 
+    // Spawn Hyprland event listener for the event log
+    let (hyprland_tx, hyprland_rx) = mpsc::channel::<AppEvent>(128);
+    let _hyprland_handle = hyprland::spawn(hyprland_tx);
+
     // Run the TUI with waybar config merge + privacy process management
-    tui::run(&mut app, &cfg.waybar.output, privacy_cmd_tx, privacy_status_rx).await
+    tui::run(
+        &mut app,
+        &cfg.waybar.output,
+        privacy_cmd_tx,
+        privacy_status_rx,
+        &cfg.event_log,
+        hyprland_rx,
+    )
+    .await
 }

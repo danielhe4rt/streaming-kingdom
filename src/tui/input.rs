@@ -2,7 +2,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 use tokio::sync::mpsc;
 
 use crate::app::{AppState, FeatureCommand};
-use super::TuiState;
+use super::{Pane, TuiState};
 
 const TOGGLE_COUNT: usize = 3;
 
@@ -40,6 +40,20 @@ pub async fn handle_key(
         // Switch focus between panes
         KeyCode::Tab => {
             tui.focused_pane = tui.focused_pane.next();
+        }
+
+        // Event log group filter toggles (only when EventLog pane focused)
+        KeyCode::Char('1') if tui.focused_pane == Pane::EventLog => {
+            tui.filter_stream = !tui.filter_stream;
+        }
+        KeyCode::Char('2') if tui.focused_pane == Pane::EventLog => {
+            tui.filter_privacy = !tui.filter_privacy;
+        }
+        KeyCode::Char('3') if tui.focused_pane == Pane::EventLog => {
+            tui.filter_system = !tui.filter_system;
+        }
+        KeyCode::Char('4') if tui.focused_pane == Pane::EventLog => {
+            tui.filter_hyprland = !tui.filter_hyprland;
         }
 
         _ => {}

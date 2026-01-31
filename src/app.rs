@@ -1,6 +1,8 @@
 use serde::Serialize;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio::sync::{broadcast, mpsc};
+
+use crate::config::EventLogConfig;
 
 // ---------------------------------------------------------------------------
 // Stream events – one producer (stream listener), N consumer modules
@@ -65,6 +67,75 @@ pub enum FeatureCommand {
 }
 
 // ---------------------------------------------------------------------------
+// Unified event log – all system events in one place
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventGroup {
+    Stream,
+    Privacy,
+    System,
+    Hyprland,
+}
+
+#[derive(Debug, Clone)]
+pub enum AppEvent {
+    // --- Group: Stream ---
+    Stream(StreamEvent),
+
+    // --- Group: Privacy ---
+    PrivacyBlurEnabled { title: String },
+    PrivacyBlurDisabled,
+    PrivacyStarted,
+    PrivacyStopped,
+    PrivacyError(String),
+
+    // --- Group: System ---
+    FeatureToggled { feature: String, enabled: bool },
+    WaybarSpawned,
+    WaybarKilled,
+    WaybarError(String),
+    AlertsBrowserOpened,
+    AlertsBrowserClosed,
+    Info(String),
+    Error(String),
+
+    // --- Group: Hyprland ---
+    WindowOpened { address: String, title: String },
+    WindowClosed { address: String },
+    WindowTitleChanged { address: String, title: String },
+    WorkspaceChanged { name: String },
+    MonitorFocused { monitor: String },
+    WindowMoved { address: String, workspace: String },
+}
+
+impl AppEvent {
+    pub fn group(&self) -> EventGroup {
+        match self {
+            AppEvent::Stream(_) => EventGroup::Stream,
+            AppEvent::PrivacyBlurEnabled { .. }
+            | AppEvent::PrivacyBlurDisabled
+            | AppEvent::PrivacyStarted
+            | AppEvent::PrivacyStopped
+            | AppEvent::PrivacyError(_) => EventGroup::Privacy,
+            AppEvent::WindowOpened { .. }
+            | AppEvent::WindowClosed { .. }
+            | AppEvent::WindowTitleChanged { .. }
+            | AppEvent::WorkspaceChanged { .. }
+            | AppEvent::MonitorFocused { .. }
+            | AppEvent::WindowMoved { .. } => EventGroup::Hyprland,
+            _ => EventGroup::System,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AppEventEntry {
+    pub event: AppEvent,
+    pub elapsed: Duration,
+}
+
+// ---------------------------------------------------------------------------
 // Stream stats – running counters reset per-session
 // ---------------------------------------------------------------------------
 
@@ -73,10 +144,7 @@ pub struct StreamStats {
     pub viewer_count: u32,
     pub followers_today: u32,
     pub subs_today: u32,
-    pub last_events: Vec<StreamEvent>,
 }
-
-const MAX_LAST_EVENTS: usize = 50;
 
 impl StreamStats {
     fn new() -> Self {
@@ -84,7 +152,6 @@ impl StreamStats {
             viewer_count: 0,
             followers_today: 0,
             subs_today: 0,
-            last_events: Vec::new(),
         }
     }
 
@@ -94,10 +161,6 @@ impl StreamStats {
             StreamEvent::Sub { .. } | StreamEvent::GiftSub { .. } => self.subs_today += 1,
             StreamEvent::ViewerCountUpdate { count } => self.viewer_count = *count,
             _ => {}
-        }
-        self.last_events.push(event.clone());
-        if self.last_events.len() > MAX_LAST_EVENTS {
-            self.last_events.remove(0);
         }
     }
 }
@@ -125,6 +188,10 @@ pub struct AppState {
     // Running stats
     pub stats: StreamStats,
 
+    // Unified event log
+    pub event_log: Vec<AppEventEntry>,
+    pub max_events: usize,
+
     // Session start time
     pub started_at: Instant,
 
@@ -133,7 +200,7 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new() -> Self {
+    pub fn new(event_log_config: &EventLogConfig) -> Self {
         let (event_tx, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
         let (command_tx, command_rx) = mpsc::channel(COMMAND_CHANNEL_CAPACITY);
 
@@ -145,6 +212,8 @@ impl AppState {
             command_tx,
             command_rx,
             stats: StreamStats::new(),
+            event_log: Vec::new(),
+            max_events: event_log_config.max_events,
             started_at: Instant::now(),
             status_message: None,
         }
@@ -163,19 +232,65 @@ impl AppState {
     /// Broadcast a stream event and update stats.
     pub fn dispatch_event(&mut self, event: StreamEvent) {
         self.stats.record(&event);
+        self.log_event(AppEvent::Stream(event.clone()));
         // Ignore send error – means no active receivers yet.
         let _ = self.event_tx.send(event);
+    }
+
+    /// Log a unified event into the event log with timestamp.
+    pub fn log_event(&mut self, event: AppEvent) {
+        let elapsed = self.started_at.elapsed();
+        self.event_log.push(AppEventEntry { event, elapsed });
+        if self.event_log.len() > self.max_events {
+            self.event_log.remove(0);
+        }
     }
 
     /// Apply a feature command, updating the corresponding toggle.
     pub fn apply_command(&mut self, cmd: &FeatureCommand) {
         match cmd {
-            FeatureCommand::EnableWaybar => self.waybar_enabled = true,
-            FeatureCommand::DisableWaybar => self.waybar_enabled = false,
-            FeatureCommand::EnablePrivacy => self.privacy_enabled = true,
-            FeatureCommand::DisablePrivacy => self.privacy_enabled = false,
-            FeatureCommand::EnableAlerts => self.alerts_enabled = true,
-            FeatureCommand::DisableAlerts => self.alerts_enabled = false,
+            FeatureCommand::EnableWaybar => {
+                self.waybar_enabled = true;
+                self.log_event(AppEvent::FeatureToggled {
+                    feature: "Waybar".into(),
+                    enabled: true,
+                });
+            }
+            FeatureCommand::DisableWaybar => {
+                self.waybar_enabled = false;
+                self.log_event(AppEvent::FeatureToggled {
+                    feature: "Waybar".into(),
+                    enabled: false,
+                });
+            }
+            FeatureCommand::EnablePrivacy => {
+                self.privacy_enabled = true;
+                self.log_event(AppEvent::FeatureToggled {
+                    feature: "Privacy".into(),
+                    enabled: true,
+                });
+            }
+            FeatureCommand::DisablePrivacy => {
+                self.privacy_enabled = false;
+                self.log_event(AppEvent::FeatureToggled {
+                    feature: "Privacy".into(),
+                    enabled: false,
+                });
+            }
+            FeatureCommand::EnableAlerts => {
+                self.alerts_enabled = true;
+                self.log_event(AppEvent::FeatureToggled {
+                    feature: "Alerts".into(),
+                    enabled: true,
+                });
+            }
+            FeatureCommand::DisableAlerts => {
+                self.alerts_enabled = false;
+                self.log_event(AppEvent::FeatureToggled {
+                    feature: "Alerts".into(),
+                    enabled: false,
+                });
+            }
         }
     }
 

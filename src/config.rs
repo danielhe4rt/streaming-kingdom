@@ -9,6 +9,8 @@ pub struct Config {
     pub alerts: AlertsConfig,
     pub waybar: WaybarConfig,
     pub privacy: PrivacyConfig,
+    #[serde(default)]
+    pub event_log: EventLogConfig,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -43,6 +45,27 @@ pub struct PrivacyConfig {
     pub sensitive_patterns: Vec<String>,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+pub struct EventLogConfig {
+    pub show_stream: bool,
+    pub show_privacy: bool,
+    pub show_system: bool,
+    pub show_hyprland: bool,
+    pub max_events: usize,
+}
+
+impl Default for EventLogConfig {
+    fn default() -> Self {
+        Self {
+            show_stream: true,
+            show_privacy: true,
+            show_system: true,
+            show_hyprland: false,
+            max_events: 100,
+        }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -74,6 +97,7 @@ impl Default for Config {
                     "id_rsa".into(),
                 ],
             },
+            event_log: EventLogConfig::default(),
         }
     }
 }
