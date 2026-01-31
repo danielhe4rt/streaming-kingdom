@@ -7,6 +7,9 @@ mod tui;
 mod waybar;
 
 use std::io;
+use std::sync::Arc;
+
+use tokio::sync::mpsc;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> io::Result<()> {
@@ -34,6 +37,20 @@ async fn main() -> io::Result<()> {
         tracing::warn!("twitch config incomplete — EventSub client not started");
     }
 
-    // Run the TUI with waybar process management
-    tui::run(&mut app, &wb_config, &wb_style).await
+    // Create privacy monitor channels and spawn its task
+    let (privacy_cmd_tx, privacy_cmd_rx) = mpsc::channel::<privacy::PrivacyCommand>(16);
+    let (privacy_status_tx, privacy_status_rx) = mpsc::channel::<privacy::PrivacyStatus>(64);
+
+    let _privacy_handle = privacy::spawn(
+        privacy_cmd_rx,
+        privacy_status_tx,
+        Arc::new(cfg.privacy),
+        Arc::from(cfg.obs.host.as_str()),
+        cfg.obs.port,
+        Arc::from(cfg.obs.password.as_str()),
+        Arc::from(cfg.obs.capture_source.as_str()),
+    );
+
+    // Run the TUI with waybar + privacy process management
+    tui::run(&mut app, &wb_config, &wb_style, privacy_cmd_tx, privacy_status_rx).await
 }

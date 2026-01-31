@@ -54,7 +54,16 @@ fn draw_toggles(frame: &mut Frame, area: Rect, app: &AppState, tui: &TuiState) {
             } else {
                 Style::default().fg(Color::DarkGray)
             };
-            ListItem::new(format!("{marker} {checkbox} {label}")).style(style)
+            let suffix = if i == 1 {
+                // Privacy Monitor — show live status when available
+                match &tui.privacy_status {
+                    Some(status) => format!("  ({status})"),
+                    None => String::new(),
+                }
+            } else {
+                String::new()
+            };
+            ListItem::new(format!("{marker} {checkbox} {label}{suffix}")).style(style)
         })
         .collect();
 

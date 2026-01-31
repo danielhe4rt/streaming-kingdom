@@ -12,6 +12,7 @@ use tokio::process::Child;
 use tokio::sync::{broadcast, mpsc};
 
 use crate::app::{AppState, FeatureCommand, StreamEvent};
+use crate::privacy::{PrivacyCommand, PrivacyStatus};
 use crate::waybar;
 
 // ---------------------------------------------------------------------------
@@ -39,6 +40,7 @@ pub struct TuiState {
     pub focused_pane: Pane,
     pub toggle_cursor: usize,
     pub event_log_scroll: u16,
+    pub privacy_status: Option<String>,
 }
 
 impl TuiState {
@@ -47,6 +49,7 @@ impl TuiState {
             focused_pane: Pane::Toggles,
             toggle_cursor: 0,
             event_log_scroll: 0,
+            privacy_status: None,
         }
     }
 }
@@ -79,6 +82,8 @@ pub async fn run(
     app: &mut AppState,
     wb_config: &PathBuf,
     wb_style: &PathBuf,
+    privacy_cmd_tx: mpsc::Sender<PrivacyCommand>,
+    privacy_status_rx: mpsc::Receiver<PrivacyStatus>,
 ) -> io::Result<()> {
     let mut terminal = init_terminal()?;
     let mut tui = TuiState::new();
@@ -100,6 +105,8 @@ pub async fn run(
         None
     };
 
+    let mut privacy_status_rx = privacy_status_rx;
+
     let result = event_loop(
         &mut terminal,
         app,
@@ -109,8 +116,13 @@ pub async fn run(
         &mut wb_child,
         wb_config,
         wb_style,
+        &privacy_cmd_tx,
+        &mut privacy_status_rx,
     )
     .await;
+
+    // Send Stop to privacy monitor for clean shutdown
+    let _ = privacy_cmd_tx.send(PrivacyCommand::Stop).await;
 
     // Clean up waybar on exit
     if let Some(child) = &mut wb_child {
@@ -130,8 +142,11 @@ async fn event_loop(
     wb_child: &mut Option<Child>,
     wb_config: &PathBuf,
     wb_style: &PathBuf,
+    privacy_cmd_tx: &mpsc::Sender<PrivacyCommand>,
+    privacy_status_rx: &mut mpsc::Receiver<PrivacyStatus>,
 ) -> io::Result<()> {
     let mut prev_waybar_enabled = app.waybar_enabled;
+    let mut prev_privacy_enabled = app.privacy_enabled;
 
     loop {
         // Draw
@@ -150,6 +165,17 @@ async fn event_loop(
         // Drain any pending stream events into stats / event log.
         while let Ok(ev) = event_rx.try_recv() {
             app.stats.record(&ev);
+        }
+
+        // Drain privacy status updates, keeping only the latest.
+        while let Ok(status) = privacy_status_rx.try_recv() {
+            tui.privacy_status = Some(match &status {
+                PrivacyStatus::Running => "running".into(),
+                PrivacyStatus::Stopped => "stopped".into(),
+                PrivacyStatus::BlurEnabled { title } => format!("blur ON: {title}"),
+                PrivacyStatus::BlurDisabled => "blur off".into(),
+                PrivacyStatus::Error(msg) => format!("error: {msg}"),
+            });
         }
 
         // Process any pending feature commands.
@@ -181,6 +207,18 @@ async fn event_loop(
                 app.status_message = None;
             }
             prev_waybar_enabled = app.waybar_enabled;
+        }
+
+        // React to privacy toggle changes
+        if app.privacy_enabled != prev_privacy_enabled {
+            let cmd = if app.privacy_enabled {
+                PrivacyCommand::Start
+            } else {
+                tui.privacy_status = None;
+                PrivacyCommand::Stop
+            };
+            let _ = privacy_cmd_tx.send(cmd).await;
+            prev_privacy_enabled = app.privacy_enabled;
         }
     }
 }
