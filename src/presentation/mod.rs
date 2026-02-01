@@ -1,4 +1,6 @@
 mod input;
+pub mod state;
+pub mod theme;
 mod ui;
 
 use std::io::{self, Stdout};
@@ -9,65 +11,14 @@ use ratatui::prelude::*;
 use ratatui::Terminal;
 use tokio::sync::{broadcast, mpsc};
 
-use crate::app::{AppEvent, AppState, FeatureCommand, StreamEvent};
-use crate::config::EventLogConfig;
-use crate::livepix::{LivepixCommand, LivepixStatus};
-use crate::privacy::{PrivacyCommand, PrivacyStatus};
-use crate::stream::chat::ChatMessage;
-use crate::waybar;
+use crate::application::{AppState, EventLogConfig};
+use crate::domain::{AppEvent, ChatMessage, FeatureCommand, StreamEvent};
+use crate::infrastructure::hyprland::{PrivacyCommand, PrivacyStatus};
+use crate::infrastructure::livepix::{LivepixCommand, LivepixStatus};
+use crate::infrastructure::waybar;
 
-// ---------------------------------------------------------------------------
-// TUI state that lives alongside (not inside) AppState
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Pane {
-    Toggles,
-    Stats,
-    EventLog,
-}
-
-impl Pane {
-    fn next(self) -> Self {
-        match self {
-            Pane::Toggles => Pane::Stats,
-            Pane::Stats => Pane::EventLog,
-            Pane::EventLog => Pane::Toggles,
-        }
-    }
-}
-
-pub struct TuiState {
-    pub focused_pane: Pane,
-    pub toggle_cursor: usize,
-    pub event_log_scroll: u16,
-    pub privacy_status: Option<String>,
-    pub livepix_status: Option<String>,
-
-    // Event log group filters (true = visible)
-    pub filter_stream: bool,
-    pub filter_privacy: bool,
-    pub filter_system: bool,
-    pub filter_hyprland: bool,
-    pub filter_chat: bool,
-}
-
-impl TuiState {
-    fn new(event_log_config: &EventLogConfig) -> Self {
-        Self {
-            focused_pane: Pane::Toggles,
-            toggle_cursor: 0,
-            event_log_scroll: 0,
-            privacy_status: None,
-            livepix_status: None,
-            filter_stream: event_log_config.show_stream,
-            filter_privacy: event_log_config.show_privacy,
-            filter_system: event_log_config.show_system,
-            filter_hyprland: event_log_config.show_hyprland,
-            filter_chat: event_log_config.show_chat,
-        }
-    }
-}
+use state::{ChatEntry, LivepixIntegrationStatus, PrivacyIntegrationStatus, TuiState};
+use theme::maybe_highlight;
 
 // ---------------------------------------------------------------------------
 // Terminal setup / teardown
@@ -104,9 +55,11 @@ pub async fn run(
     mut hyprland_rx: mpsc::Receiver<AppEvent>,
     mut twitch_event_rx: mpsc::Receiver<AppEvent>,
     mut chat_rx: mpsc::Receiver<ChatMessage>,
+    twitch_channel: &str,
+    tts_available: bool,
 ) -> io::Result<()> {
     let mut terminal = init_terminal()?;
-    let mut tui = TuiState::new(event_log_config);
+    let mut tui = TuiState::new(event_log_config, twitch_channel, tts_available);
     let mut event_rx = app.subscribe_events();
     let cmd_tx = app.command_sender();
 
@@ -189,21 +142,39 @@ async fn event_loop(
             }
         }
 
-        // Drain any pending stream events into stats / event log.
+        // Drain any pending stream events into stats / event log / highlights.
         while let Ok(ev) = event_rx.try_recv() {
             app.stats.record(&ev);
+            if let Some(highlight) = maybe_highlight(&ev) {
+                tui.push_highlight(highlight);
+            }
             app.log_event(AppEvent::Stream(ev));
         }
 
-        // Drain privacy status updates — log each and keep latest for display.
+        // Drain privacy status updates — populate structured status.
         while let Ok(status) = privacy_status_rx.try_recv() {
-            tui.privacy_status = Some(match &status {
-                PrivacyStatus::Running => "running".into(),
-                PrivacyStatus::Stopped => "stopped".into(),
-                PrivacyStatus::BlurEnabled { title } => format!("blur ON: {title}"),
-                PrivacyStatus::BlurDisabled => "blur off".into(),
-                PrivacyStatus::Error(msg) => format!("error: {msg}"),
-            });
+            match &status {
+                PrivacyStatus::Running => {
+                    tui.privacy.running = true;
+                    tui.privacy.last_error = None;
+                }
+                PrivacyStatus::Stopped => {
+                    tui.privacy.running = false;
+                    tui.privacy.blur_active = false;
+                    tui.privacy.blur_target = None;
+                }
+                PrivacyStatus::BlurEnabled { title } => {
+                    tui.privacy.blur_active = true;
+                    tui.privacy.blur_target = Some(title.clone());
+                }
+                PrivacyStatus::BlurDisabled => {
+                    tui.privacy.blur_active = false;
+                    tui.privacy.blur_target = None;
+                }
+                PrivacyStatus::Error(msg) => {
+                    tui.privacy.last_error = Some(msg.clone());
+                }
+            }
 
             // Log privacy events to the unified event log.
             match status {
@@ -225,58 +196,113 @@ async fn event_loop(
             }
         }
 
-        // Drain Livepix status updates — log each and keep latest for display.
+        // Drain Livepix status updates — populate structured status.
         while let Ok(status) = livepix_status_rx.try_recv() {
-            tui.livepix_status = Some(match &status {
-                LivepixStatus::Running { port } => format!("listening :{port}"),
-                LivepixStatus::Stopped => "stopped".into(),
-                LivepixStatus::OAuthSuccess => "authenticated".into(),
-                LivepixStatus::OAuthError(msg) => format!("auth error: {msg}"),
-                LivepixStatus::WebhookReceived { username, amount } => {
-                    format!("{username}: {amount}")
-                }
-                LivepixStatus::Error(msg) => format!("error: {msg}"),
-            });
-
-            // Log to unified event log so user can see everything.
             match &status {
                 LivepixStatus::Running { port } => {
-                    app.log_event(AppEvent::Info(format!(
-                        "Livepix webhook listening on 127.0.0.1:{port}"
+                    tui.livepix.running = true;
+                    tui.livepix.port = *port;
+                    tui.livepix.last_error = None;
+                }
+                LivepixStatus::Stopped => {
+                    tui.livepix.running = false;
+                }
+                LivepixStatus::OAuthSuccess => {
+                    tui.livepix.oauth_ok = true;
+                }
+                LivepixStatus::OAuthError(msg) => {
+                    tui.livepix.oauth_ok = false;
+                    tui.livepix.last_error = Some(msg.clone());
+                }
+                LivepixStatus::WebhookReceived { .. } => {}
+                LivepixStatus::Error(msg) => {
+                    tui.livepix.last_error = Some(msg.clone());
+                }
+            }
+
+            // Log to unified event log using Livepix-specific variants.
+            match &status {
+                LivepixStatus::Running { port } => {
+                    app.log_event(AppEvent::LivepixInfo(format!(
+                        "Webhook listening on 127.0.0.1:{port}"
                     )));
                 }
                 LivepixStatus::Stopped => {
-                    app.log_event(AppEvent::Info("Livepix webhook stopped".into()));
+                    app.log_event(AppEvent::LivepixInfo("Webhook stopped".into()));
                 }
                 LivepixStatus::OAuthSuccess => {
-                    app.log_event(AppEvent::Info("Livepix OAuth authenticated".into()));
+                    app.log_event(AppEvent::LivepixInfo("OAuth authenticated".into()));
                 }
                 LivepixStatus::OAuthError(msg) => {
-                    app.log_event(AppEvent::Error(format!("Livepix OAuth failed: {msg}")));
+                    app.log_event(AppEvent::LivepixError(format!("OAuth failed: {msg}")));
                 }
                 LivepixStatus::WebhookReceived { username, amount } => {
-                    app.log_event(AppEvent::Info(format!(
-                        "Livepix: {username} donated {amount}"
+                    app.log_event(AppEvent::LivepixInfo(format!(
+                        "{username} donated {amount}"
                     )));
                 }
                 LivepixStatus::Error(msg) => {
-                    app.log_event(AppEvent::Error(format!("Livepix: {msg}")));
+                    app.log_event(AppEvent::LivepixError(msg.clone()));
                 }
             }
         }
 
         // Drain Hyprland events into the event log.
         while let Ok(ev) = hyprland_rx.try_recv() {
+            tui.hyprland.listening = true;
+            tui.hyprland.event_count += 1;
             app.log_event(ev);
         }
 
-        // Drain Twitch background events into the event log.
+        // Drain Twitch background events into the event log and update status.
         while let Ok(ev) = twitch_event_rx.try_recv() {
+            // Parse info/error strings to populate eventsub + chat status
+            match &ev {
+                AppEvent::Info(msg) => {
+                    let lower = msg.to_lowercase();
+                    if lower.contains("connected to eventsub") || lower.contains("eventsub connecting") {
+                        tui.twitch_eventsub.connected = true;
+                    }
+                    if lower.contains("session established") || lower.contains("welcome") {
+                        tui.twitch_eventsub.session_established = true;
+                    }
+                    if lower.contains("subscribed to") {
+                        tui.twitch_eventsub.subs_registered += 1;
+                    }
+                    // Chat status
+                    if lower.contains("twitch chat joined") {
+                        tui.twitch_chat.connected = true;
+                    }
+                }
+                AppEvent::Error(msg) => {
+                    let lower = msg.to_lowercase();
+                    // Chat disconnect
+                    if lower.contains("twitch chat disconnected") || lower.contains("twitch chat failed") {
+                        tui.twitch_chat.connected = false;
+                    }
+                    // EventSub disconnect
+                    else if lower.contains("disconnected") || lower.contains("timeout") {
+                        tui.twitch_eventsub.connected = false;
+                        tui.twitch_eventsub.session_established = false;
+                        tui.twitch_eventsub.subs_registered = 0;
+                    }
+                    tui.twitch_eventsub.last_error = Some(msg.clone());
+                }
+                _ => {}
+            }
             app.log_event(ev);
         }
 
-        // Drain Twitch IRC chat messages into the event log.
+        // Drain Twitch IRC chat messages into chat buffer and event log.
         while let Ok(msg) = chat_rx.try_recv() {
+            tui.twitch_chat.connected = true;
+            tui.twitch_chat.message_count += 1;
+
+            tui.push_chat(ChatEntry {
+                username: msg.username.clone(),
+                text: msg.text.clone(),
+            });
+
             app.log_event(AppEvent::ChatMessage {
                 username: msg.username,
                 text: msg.text,
@@ -289,7 +315,6 @@ async fn event_loop(
         // React to waybar toggle changes
         if app.waybar_enabled != prev_waybar_enabled {
             if app.waybar_enabled {
-                // Enable: merge config + style, restart waybar
                 match waybar::enable(waybar_output).await {
                     Ok(()) => {
                         app.status_message = None;
@@ -304,7 +329,6 @@ async fn event_loop(
                     }
                 }
             } else {
-                // Disable: remove config + style, restart waybar
                 if let Err(e) = waybar::disable().await {
                     tracing::warn!("failed to disable waybar stream bar: {e}");
                 }
@@ -319,7 +343,7 @@ async fn event_loop(
             let cmd = if app.privacy_enabled {
                 PrivacyCommand::Start
             } else {
-                tui.privacy_status = None;
+                tui.privacy = PrivacyIntegrationStatus::default();
                 PrivacyCommand::Stop
             };
             let _ = privacy_cmd_tx.send(cmd).await;
@@ -331,7 +355,7 @@ async fn event_loop(
             let cmd = if app.livepix_enabled {
                 LivepixCommand::Start
             } else {
-                tui.livepix_status = None;
+                tui.livepix = LivepixIntegrationStatus::default();
                 LivepixCommand::Stop
             };
             let _ = livepix_cmd_tx.send(cmd).await;

@@ -3,7 +3,7 @@ use std::path::Path;
 use tokio::process::Command;
 use tokio::sync::mpsc;
 
-use crate::config::TtsConfig;
+use crate::application::TtsConfig;
 
 pub struct TtsRequest {
     pub text: String,

@@ -1,5 +1,3 @@
-pub mod tts;
-
 use std::sync::Arc;
 
 use axum::extract::State;
@@ -10,30 +8,10 @@ use axum::Router;
 use serde::Deserialize;
 use tokio::sync::{broadcast, mpsc, Mutex};
 
-use crate::app::StreamEvent;
-use crate::config::LivepixConfig;
+use crate::application::LivepixConfig;
+use crate::domain::StreamEvent;
 
-pub use tts::TtsRequest;
-
-// ---------------------------------------------------------------------------
-// Commands & status messages exchanged with the TUI
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum LivepixCommand {
-    Start,
-    Stop,
-}
-
-#[derive(Debug, Clone)]
-pub enum LivepixStatus {
-    Running { port: u16 },
-    Stopped,
-    OAuthSuccess,
-    OAuthError(String),
-    WebhookReceived { username: String, amount: String },
-    Error(String),
-}
+use super::{LivepixCommand, LivepixStatus, TtsRequest};
 
 // ---------------------------------------------------------------------------
 // Webhook deserialization types (ported from webhook-server.rs)

@@ -8,8 +8,8 @@ use tokio::time;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 
-use crate::app::{AppEvent, StreamEvent, SubTier};
-use crate::config::TwitchConfig;
+use crate::application::TwitchConfig;
+use crate::domain::{AppEvent, StreamEvent, SubTier};
 
 const EVENTSUB_URL: &str = "wss://eventsub.wss.twitch.tv/ws";
 const HELIX_SUBSCRIPTIONS_URL: &str = "https://api.twitch.tv/helix/eventsub/subscriptions";

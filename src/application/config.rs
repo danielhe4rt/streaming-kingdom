@@ -75,6 +75,8 @@ pub struct EventLogConfig {
     pub show_system: bool,
     pub show_hyprland: bool,
     #[serde(default = "default_true")]
+    pub show_livepix: bool,
+    #[serde(default = "default_true")]
     pub show_chat: bool,
     pub max_events: usize,
 }
@@ -160,6 +162,7 @@ impl Default for EventLogConfig {
             show_privacy: true,
             show_system: true,
             show_hyprland: false,
+            show_livepix: true,
             show_chat: true,
             max_events: 100,
         }

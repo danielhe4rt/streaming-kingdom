@@ -8,7 +8,7 @@ use std::{fs, io};
 use tokio::process::Command;
 use tokio::sync::broadcast;
 
-use crate::app::StreamEvent;
+use crate::domain::StreamEvent;
 
 // ---------------------------------------------------------------------------
 // Cache directory layout (for stream_data.json — still used by event_writer)
@@ -41,7 +41,7 @@ pub fn stream_events_script_path() -> io::Result<PathBuf> {
 }
 
 /// Ensure the Python script exists for waybar exec commands.
-const STREAM_EVENTS_SCRIPT: &str = include_str!("../../scripts/stream_events.py");
+const STREAM_EVENTS_SCRIPT: &str = include_str!("../../../scripts/stream_events.py");
 
 pub fn ensure_scripts() -> io::Result<()> {
     let script_path = stream_events_script_path()?;

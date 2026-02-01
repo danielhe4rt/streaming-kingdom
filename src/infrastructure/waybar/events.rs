@@ -3,7 +3,7 @@ use std::path::Path;
 
 use serde::Serialize;
 
-use crate::app::{StreamEvent, SubTier};
+use crate::domain::{StreamEvent, SubTier};
 
 // ---------------------------------------------------------------------------
 // Waybar-specific event representation (written to stream_data.json)

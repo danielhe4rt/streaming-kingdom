@@ -1,6 +1,6 @@
 use tokio::sync::mpsc;
 
-use crate::app::AppEvent;
+use crate::domain::AppEvent;
 
 /// Spawn a dedicated Hyprland event listener that forwards window lifecycle
 /// events to the TUI event log via `tx`.
