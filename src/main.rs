@@ -107,7 +107,7 @@ async fn main() -> io::Result<()> {
     );
 
     // Spawn TTS worker (returns None if API key is empty)
-    let tts_tx = infrastructure::livepix::tts::spawn(cfg.livepix.tts.clone());
+    let tts_tx = infrastructure::elevenlabs::spawn(cfg.livepix.tts.clone());
     let tts_available = tts_tx.is_some();
 
     // Create Livepix webhook server channels and spawn its task

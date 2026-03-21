@@ -1,8 +1,9 @@
-pub mod tts;
 mod webhook;
 
-pub use tts::TtsRequest;
 pub use webhook::spawn;
+
+// Re-export TtsRequest from elevenlabs so webhook.rs can use it via super::
+pub use crate::infrastructure::elevenlabs::TtsRequest;
 
 // ---------------------------------------------------------------------------
 // Commands & status messages exchanged with the TUI
