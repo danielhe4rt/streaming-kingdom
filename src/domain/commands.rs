@@ -12,4 +12,6 @@ pub enum FeatureCommand {
     DisableAlerts,
     EnableLivepix,
     DisableLivepix,
+    EnableOverlays,
+    DisableOverlays,
 }

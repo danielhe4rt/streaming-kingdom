@@ -28,7 +28,6 @@ pub const COLOR_MONITOR: Color = Color::Rgb(0xff, 0xcb, 0x6b);
 pub const COLOR_CHAT: Color = Color::Rgb(0xc3, 0xe8, 0x8d);
 
 pub const COLOR_CONNECTED: Color = Color::Rgb(0xc3, 0xe8, 0x8d);
-pub const COLOR_DISCONNECTED: Color = Color::Rgb(0xff, 0x53, 0x70);
 pub const COLOR_INACTIVE: Color = Color::Rgb(0x67, 0x6e, 0x95);
 pub const COLOR_STARTING: Color = Color::Rgb(0xff, 0xcb, 0x6b);
 

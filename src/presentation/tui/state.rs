@@ -4,37 +4,7 @@ use ratatui::prelude::*;
 
 use crate::application::EventLogConfig;
 
-// ---------------------------------------------------------------------------
-// Pane enum (4 panes)
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Pane {
-    Integrations,
-    Stats,
-    Chat,
-    EventLog,
-}
-
-impl Pane {
-    pub fn next(self) -> Self {
-        match self {
-            Pane::Integrations => Pane::Stats,
-            Pane::Stats => Pane::Chat,
-            Pane::Chat => Pane::EventLog,
-            Pane::EventLog => Pane::Integrations,
-        }
-    }
-
-    pub fn prev(self) -> Self {
-        match self {
-            Pane::Integrations => Pane::EventLog,
-            Pane::Stats => Pane::Integrations,
-            Pane::Chat => Pane::Stats,
-            Pane::EventLog => Pane::Chat,
-        }
-    }
-}
+use super::nav::NavState;
 
 // ---------------------------------------------------------------------------
 // Integration status structs
@@ -88,6 +58,15 @@ pub struct HyprlandIntegrationStatus {
     pub event_count: u64,
 }
 
+/// Live status of the Overlays Output (the `http` server), populated from the
+/// [`OverlayStatus`](crate::presentation::http::OverlayStatus) channel.
+#[derive(Debug, Default)]
+pub struct OverlaysIntegrationStatus {
+    pub running: bool,
+    pub port: u16,
+    pub last_error: Option<String>,
+}
+
 // ---------------------------------------------------------------------------
 // Chat & highlight buffers
 // ---------------------------------------------------------------------------
@@ -113,8 +92,10 @@ pub struct HighlightEntry {
 // ---------------------------------------------------------------------------
 
 pub struct TuiState {
-    pub focused_pane: Pane,
-    pub integration_cursor: usize,
+    /// The two-level nav shell state (topbar section + per-section sub-nav).
+    pub nav: NavState,
+
+    /// Scroll offsets for the content pane (reused across Activity sub-items).
     pub event_log_scroll: u16,
     pub chat_scroll: u16,
 
@@ -124,6 +105,7 @@ pub struct TuiState {
     pub livepix: LivepixIntegrationStatus,
     pub privacy: PrivacyIntegrationStatus,
     pub hyprland: HyprlandIntegrationStatus,
+    pub overlays: OverlaysIntegrationStatus,
 
     // Chat ring buffer (separate from event log)
     pub chat_messages: VecDeque<ChatEntry>,
@@ -141,6 +123,9 @@ pub struct TuiState {
 
     // Feature flags
     pub tts_available: bool,
+
+    /// Overlay server port (from `[overlays.port]`), used to render OBS URLs.
+    pub overlays_port: u16,
 }
 
 impl TuiState {
@@ -148,10 +133,10 @@ impl TuiState {
         event_log_config: &EventLogConfig,
         twitch_channel: &str,
         tts_available: bool,
+        overlays_port: u16,
     ) -> Self {
         Self {
-            focused_pane: Pane::Integrations,
-            integration_cursor: 0,
+            nav: NavState::new(),
             event_log_scroll: 0,
             chat_scroll: 0,
             twitch_eventsub: TwitchEventSubStatus::default(),
@@ -159,6 +144,10 @@ impl TuiState {
             livepix: LivepixIntegrationStatus::default(),
             privacy: PrivacyIntegrationStatus::default(),
             hyprland: HyprlandIntegrationStatus::default(),
+            overlays: OverlaysIntegrationStatus {
+                port: overlays_port,
+                ..Default::default()
+            },
             chat_messages: VecDeque::with_capacity(CHAT_BUFFER_CAPACITY),
             highlights: VecDeque::with_capacity(HIGHLIGHT_BUFFER_CAPACITY),
             filter_stream: event_log_config.show_stream,
@@ -168,6 +157,7 @@ impl TuiState {
             filter_livepix: event_log_config.show_livepix,
             filter_chat: event_log_config.show_chat,
             tts_available,
+            overlays_port,
         }
     }
 

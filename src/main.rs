@@ -185,15 +185,22 @@ async fn main() -> io::Result<()> {
         cfg.livepix.clone(),
     );
 
-    // Start the Overlay HTTP server (presentation/http) on boot — binds
-    // 127.0.0.1:<overlays.port> and serves the Chat Overlay + Overlay Feed.
+    // Spawn the Overlay HTTP server as a toggleable Output (presentation/http).
+    // Unlike the tracer-bullet slice it is no longer always-on: it idles until
+    // the TUI sends Start (Overlays toggle), then binds 127.0.0.1:<overlays.port>.
+    let (overlays_cmd_tx, overlays_cmd_rx) =
+        mpsc::channel::<presentation::http::OverlayCommand>(16);
+    let (overlays_status_tx, overlays_status_rx) =
+        mpsc::channel::<presentation::http::OverlayStatus>(64);
     let _overlays_handle = presentation::http::spawn(
+        overlays_cmd_rx,
+        overlays_status_tx,
         app.chat_tx.clone(),
         app.event_tx.clone(),
         cfg.overlays.port,
     );
     app.log_event(AppEvent::Info(format!(
-        "Overlays http server on http://127.0.0.1:{}/overlay/chat",
+        "Overlays Output ready (toggle to serve on http://127.0.0.1:{}/overlay/chat)",
         cfg.overlays.port
     )));
 
@@ -246,19 +253,25 @@ async fn main() -> io::Result<()> {
     let (hyprland_tx, hyprland_rx) = mpsc::channel::<AppEvent>(128);
     let _hyprland_handle = infrastructure::hyprland::spawn(hyprland_tx);
 
-    // Run the TUI with waybar config merge + privacy process management
-    presentation::run(
-        &mut app,
-        &cfg.waybar.output,
+    // Run the TUI nav shell with all integration channels bundled.
+    let channels = presentation::RunChannels {
         privacy_cmd_tx,
         privacy_status_rx,
         livepix_cmd_tx,
         livepix_status_rx,
-        &cfg.event_log,
+        overlays_cmd_tx,
+        overlays_status_rx,
         hyprland_rx,
         twitch_event_rx,
+    };
+    presentation::run(
+        &mut app,
+        &cfg.waybar.output,
+        channels,
+        &cfg.event_log,
         &cfg.twitch.channel,
         tts_available,
+        cfg.overlays.port,
     )
     .await
 }

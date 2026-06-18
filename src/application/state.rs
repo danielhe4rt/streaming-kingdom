@@ -19,6 +19,7 @@ pub struct AppState {
     pub privacy_enabled: bool,
     pub alerts_enabled: bool,
     pub livepix_enabled: bool,
+    pub overlays_enabled: bool,
 
     // broadcast: stream events (1 producer → N consumers)
     pub event_tx: broadcast::Sender<StreamEvent>,
@@ -58,6 +59,7 @@ impl AppState {
             privacy_enabled: false,
             alerts_enabled: true,
             livepix_enabled: false,
+            overlays_enabled: false,
             event_tx,
             chat_tx,
             command_tx,
@@ -158,6 +160,20 @@ impl AppState {
                 self.livepix_enabled = false;
                 self.log_event(AppEvent::FeatureToggled {
                     feature: "Livepix".into(),
+                    enabled: false,
+                });
+            }
+            FeatureCommand::EnableOverlays => {
+                self.overlays_enabled = true;
+                self.log_event(AppEvent::FeatureToggled {
+                    feature: "Overlays".into(),
+                    enabled: true,
+                });
+            }
+            FeatureCommand::DisableOverlays => {
+                self.overlays_enabled = false;
+                self.log_event(AppEvent::FeatureToggled {
+                    feature: "Overlays".into(),
                     enabled: false,
                 });
             }
