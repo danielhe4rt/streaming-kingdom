@@ -10,19 +10,31 @@ pub mod services;
 pub mod shell;
 
 use ratatui::prelude::*;
+use ratatui::widgets::{Block, BorderType, Borders, Padding};
 
 use super::nav::{Section, SubItem};
 use super::state::TuiState;
+use super::theme::COLOR_SUB;
 use crate::application::AppState;
 
-/// Main draw entry point: topbar (top) → [sidebar | content] → status bar.
+/// Main draw entry point: an outer bordered frame wrapping
+/// topbar (top) → [sidebar | content] → status bar.
 pub fn draw(frame: &mut Frame, app: &AppState, tui: &TuiState) {
+    // Outer border + padding around the whole UI.
+    let outer = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(COLOR_SUB))
+        .padding(Padding::horizontal(1));
+    let root = outer.inner(frame.area());
+    frame.render_widget(outer, frame.area());
+
     let [topbar_area, main_area, status_area] = Layout::vertical([
         Constraint::Length(2),
         Constraint::Min(0),
         Constraint::Length(1),
     ])
-    .areas(frame.area());
+    .areas(root);
 
     shell::draw_topbar(frame, topbar_area, app, tui);
 
