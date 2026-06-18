@@ -69,3 +69,17 @@ echo "Done!"
 - playerctl (for Spotify integration)
 - Python 3
 - Waybar
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in this repo's GitHub Issues (uses the `gh` CLI). Note: no git remote is configured yet. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Canonical triage roles use their default strings, plus `area:*` (DDD layer) and `infra:*` (external integration) labels derived from `src/`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Multi-context: `CONTEXT-MAP.md` at the root points to one `CONTEXT.md` per layer (domain, application, infrastructure, presentation, alerts). See `docs/agents/domain.md`.
