@@ -34,6 +34,31 @@ pub fn draw_all(frame: &mut Frame, area: Rect, app: &AppState, tui: &TuiState) {
         lines.push(format::service_line(def, app, tui, selected == Some(def.id)));
     }
 
+    // Live summary footer.
+    let inputs_live = tui.twitch_eventsub.connected as u32
+        + tui.twitch_chat.connected as u32
+        + tui.livepix.running as u32
+        + tui.hyprland.listening as u32
+        + tui.privacy.running as u32;
+    let outputs_on = app.waybar_enabled as u32 + tui.overlays.running as u32;
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("  Inputs ", Style::default().fg(COLOR_MUTED)),
+        Span::styled(
+            format!("{inputs_live}/5 live"),
+            Style::default().fg(COLOR_CONNECTED),
+        ),
+        Span::styled("   Outputs ", Style::default().fg(COLOR_MUTED)),
+        Span::styled(
+            format!("{outputs_on}/2 active"),
+            Style::default().fg(COLOR_CONNECTED),
+        ),
+        Span::styled(
+            "   ·  Space/Enter to toggle the selected Output",
+            Style::default().fg(COLOR_MUTED),
+        ),
+    ]));
+
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
 }
 

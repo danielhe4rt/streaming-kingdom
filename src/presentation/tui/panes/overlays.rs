@@ -24,18 +24,46 @@ pub fn draw_all(frame: &mut Frame, area: Rect, app: &AppState, tui: &TuiState) {
     for o in OverlayId::ALL.iter() {
         lines.push(overlay_row(o, tui));
     }
-
-    lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
         "  Each Overlay is one OBS browser source consuming the shared SSE feed.",
         Style::default().fg(COLOR_MUTED),
     )));
-    lines.push(Line::from(Span::styled(
-        "  Toggle the server with Space/Enter while on this section.",
-        Style::default().fg(COLOR_MUTED),
-    )));
 
-    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+    lines.push(Line::from(""));
+    lines.push(format::section_label("Live feed"));
+    lines.push(format::kv(
+        "Endpoint",
+        &format!("http://127.0.0.1:{}/overlay/feed", tui.overlays_port),
+    ));
+    lines.push(format::kv(
+        "Payload",
+        "ChatMessage (badges/emotes/colour) + StreamEvent + delete",
+    ));
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "  RECENT ON FEED",
+        Style::default().fg(COLOR_MUTED).add_modifier(Modifier::BOLD),
+    )));
+    if tui.chat_messages.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "  no messages yet…",
+            Style::default()
+                .fg(COLOR_MUTED)
+                .add_modifier(Modifier::ITALIC),
+        )));
+    } else {
+        for msg in tui.chat_messages.iter().rev().take(10) {
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format!("  {}: ", msg.username),
+                    Style::default().fg(COLOR_CHAT).add_modifier(Modifier::BOLD),
+                ),
+                Span::raw(msg.text.clone()),
+            ]));
+        }
+    }
+
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), inner);
 }
 
 /// Per-Overlay detail: name, enabled state, and the OBS browser source URL.

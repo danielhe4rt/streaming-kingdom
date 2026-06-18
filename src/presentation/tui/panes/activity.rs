@@ -26,6 +26,23 @@ pub fn draw_chat(frame: &mut Frame, area: Rect, tui: &TuiState) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
+    if tui.chat_messages.is_empty() {
+        let hint = if tui.twitch_chat.connected {
+            "  Connected — waiting for the first message…"
+        } else {
+            "  Not connected to chat yet."
+        };
+        frame.render_widget(
+            Paragraph::new(hint).style(
+                Style::default()
+                    .fg(COLOR_MUTED)
+                    .add_modifier(Modifier::ITALIC),
+            ),
+            inner,
+        );
+        return;
+    }
+
     let lines: Vec<Line> = tui
         .chat_messages
         .iter()

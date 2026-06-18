@@ -45,7 +45,7 @@ pub fn draw(frame: &mut Frame, app: &AppState, tui: &TuiState) {
     let [sidebar_area, content_area] =
         Layout::horizontal([Constraint::Length(24), Constraint::Min(0)]).areas(main_area);
 
-    shell::draw_sidebar(frame, sidebar_area, tui);
+    shell::draw_sidebar(frame, sidebar_area, app, tui);
     draw_content(frame, content_area, app, tui);
 
     shell::draw_status_bar(frame, status_area, app);

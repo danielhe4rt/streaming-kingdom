@@ -7,21 +7,25 @@ use ratatui::widgets::{Block, Borders, Paragraph};
 use crate::application::AppState;
 
 use super::super::nav::{self, Section, SubItem};
+use super::super::service;
 use super::super::state::TuiState;
 use super::super::theme::*;
+use super::format;
 
-/// Top bar: brand, the primary section tabs, and live status chips.
+/// Top bar: the primary section tabs (left) and a live health strip (right).
+/// The brand lives on the outer frame, so it isn't repeated here.
 pub fn draw_topbar(frame: &mut Frame, area: Rect, app: &AppState, tui: &TuiState) {
-    let mut spans = vec![
-        Span::styled(
-            " ♥ streams-toolkit ",
-            Style::default()
-                .fg(COLOR_ACCENT)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw("  "),
-    ];
+    let block = Block::default()
+        .borders(Borders::BOTTOM)
+        .border_style(Style::default().fg(COLOR_BORDER));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
 
+    let [tabs_area, health_area] =
+        Layout::horizontal([Constraint::Percentage(55), Constraint::Min(0)]).areas(inner);
+
+    // Left: section tabs.
+    let mut tabs = vec![Span::raw(" ")];
     for section in Section::ALL {
         let selected = tui.nav.section == section;
         let style = if selected {
@@ -32,46 +36,55 @@ pub fn draw_topbar(frame: &mut Frame, area: Rect, app: &AppState, tui: &TuiState
         } else {
             Style::default().fg(COLOR_MUTED)
         };
-        spans.push(Span::styled(format!(" {} ", section.label()), style));
-        spans.push(Span::raw(" "));
+        tabs.push(Span::styled(format!(" {} ", section.label()), style));
+        tabs.push(Span::raw(" "));
     }
+    frame.render_widget(Paragraph::new(Line::from(tabs)), tabs_area);
 
-    // Right-aligned-ish status chips.
+    // Right: channel + key service health dots, always visible.
+    let plain = |on: bool| if on { ("●", COLOR_CONNECTED) } else { ("○", COLOR_INACTIVE) };
     let channel = if tui.twitch_chat.channel.is_empty() {
         "—".to_string()
     } else {
         format!("#{}", tui.twitch_chat.channel)
     };
-    let overlays_chip = if tui.overlays.running {
-        format!("overlays :{} ●", tui.overlays_port)
+    let (es, es_c) = plain(tui.twitch_eventsub.connected);
+    let (ch, ch_c) = plain(tui.twitch_chat.connected);
+    let (ov, ov_c) = if tui.overlays.running {
+        ("●", COLOR_CONNECTED)
     } else if app.overlays_enabled {
-        format!("overlays :{} ◌", tui.overlays_port)
+        ("●", COLOR_STARTING)
     } else {
-        "overlays off".to_string()
+        ("○", COLOR_INACTIVE)
     };
-    spans.push(Span::raw("   "));
-    spans.push(Span::styled(channel, Style::default().fg(COLOR_CONNECTED)));
-    spans.push(Span::raw("  "));
-    spans.push(Span::styled(
-        overlays_chip,
-        Style::default().fg(if tui.overlays.running {
-            COLOR_CONNECTED
-        } else {
-            COLOR_INACTIVE
-        }),
-    ));
 
-    let bar = Paragraph::new(Line::from(spans)).block(
-        Block::default()
-            .borders(Borders::BOTTOM)
-            .border_style(Style::default().fg(COLOR_BORDER)),
+    let health = Line::from(vec![
+        Span::styled(
+            channel,
+            Style::default()
+                .fg(COLOR_ACCENT)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("    "),
+        Span::styled(format!("{es} "), Style::default().fg(es_c)),
+        Span::styled("EventSub  ", Style::default().fg(COLOR_MUTED)),
+        Span::styled(format!("{ch} "), Style::default().fg(ch_c)),
+        Span::styled("Chat  ", Style::default().fg(COLOR_MUTED)),
+        Span::styled(format!("{ov} "), Style::default().fg(ov_c)),
+        Span::styled(
+            format!("Overlays:{} ", tui.overlays_port),
+            Style::default().fg(COLOR_MUTED),
+        ),
+    ]);
+    frame.render_widget(
+        Paragraph::new(health).alignment(Alignment::Right),
+        health_area,
     );
-    frame.render_widget(bar, area);
 }
 
 /// Sidebar: the contextual sub-nav for the active section, with the active
-/// section name as a breadcrumb header.
-pub fn draw_sidebar(frame: &mut Frame, area: Rect, tui: &TuiState) {
+/// section name as a breadcrumb header and a live status dot per Service/Overlay.
+pub fn draw_sidebar(frame: &mut Frame, area: Rect, app: &AppState, tui: &TuiState) {
     let block = Block::default()
         .borders(Borders::RIGHT)
         .border_style(Style::default().fg(COLOR_BORDER));
@@ -104,13 +117,34 @@ pub fn draw_sidebar(frame: &mut Frame, area: Rect, tui: &TuiState) {
         } else {
             ("  ", Style::default().fg(COLOR_MUTED))
         };
-        lines.push(Line::from(vec![
-            Span::styled(marker, Style::default().fg(COLOR_PRIMARY)),
-            Span::styled(sub_label_with_tag(item), style),
-        ]));
+        let mut spans = vec![Span::styled(marker, Style::default().fg(COLOR_PRIMARY))];
+        // Live status dot for Service/Overlay items (keeps labels aligned).
+        match sub_item_dot(item, app, tui) {
+            Some((dot, color)) => spans.push(Span::styled(format!("{dot} "), Style::default().fg(color))),
+            None => spans.push(Span::raw("  ")),
+        }
+        spans.push(Span::styled(sub_label_with_tag(item), style));
+        lines.push(Line::from(spans));
     }
 
     frame.render_widget(Paragraph::new(lines), inner);
+}
+
+/// Live status dot for a sidebar sub-item, when it maps to a Service/Overlay.
+fn sub_item_dot(item: SubItem, app: &AppState, tui: &TuiState) -> Option<(&'static str, Color)> {
+    match item {
+        SubItem::Service(id) => {
+            let def = service::registry().iter().find(|s| s.id == id).copied()?;
+            let (dot, color, _) = format::service_status(&def, app, tui);
+            Some((dot, color))
+        }
+        SubItem::Overlay(_) => Some(if tui.overlays.running {
+            ("●", COLOR_CONNECTED)
+        } else {
+            ("○", COLOR_INACTIVE)
+        }),
+        _ => None,
+    }
 }
 
 /// Status bar with context-aware key hints.
