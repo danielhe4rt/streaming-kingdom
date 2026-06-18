@@ -26,3 +26,8 @@ show_privacy = true
 show_system = true
 show_hyprland = false
 max_events = 100
+
+[overlays]
+# Port the Overlay http server binds on (127.0.0.1). Paste the URLs it logs
+# into OBS browser sources, e.g. http://127.0.0.1:1337/overlay/chat
+port = 1337

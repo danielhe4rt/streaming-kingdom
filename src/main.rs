@@ -185,8 +185,17 @@ async fn main() -> io::Result<()> {
         cfg.livepix.clone(),
     );
 
-    // Spawn Twitch IRC chat client
-    let (chat_tx, chat_rx) = mpsc::channel::<domain::ChatMessage>(256);
+    // Start the Overlay HTTP server (presentation/http) on boot — binds
+    // 127.0.0.1:<overlays.port> and serves the Chat Overlay + Overlay Feed.
+    let _overlays_handle =
+        presentation::http::spawn(app.chat_tx.clone(), cfg.overlays.port);
+    app.log_event(AppEvent::Info(format!(
+        "Overlays http server on http://127.0.0.1:{}/overlay/chat",
+        cfg.overlays.port
+    )));
+
+    // Spawn Twitch IRC chat client (fans out over the chat broadcast channel).
+    let chat_tx = app.chat_tx.clone();
     if !cfg.twitch.channel.is_empty() {
         // Pass credentials if available (channel name as login, oauth_token for auth)
         let login_name = if !cfg.twitch.channel.is_empty() && !cfg.twitch.oauth_token.is_empty() {
@@ -230,7 +239,6 @@ async fn main() -> io::Result<()> {
         &cfg.event_log,
         hyprland_rx,
         twitch_event_rx,
-        chat_rx,
         &cfg.twitch.channel,
         tts_available,
     )

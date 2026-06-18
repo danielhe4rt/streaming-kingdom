@@ -3,13 +3,14 @@ use std::time::Instant;
 use tokio::sync::{broadcast, mpsc};
 
 use crate::application::config::EventLogConfig;
-use crate::domain::{AppEvent, AppEventEntry, FeatureCommand, StreamEvent, StreamStats};
+use crate::domain::{AppEvent, AppEventEntry, ChatMessage, FeatureCommand, StreamEvent, StreamStats};
 
 // ---------------------------------------------------------------------------
 // Central application state
 // ---------------------------------------------------------------------------
 
 const EVENT_CHANNEL_CAPACITY: usize = 256;
+const CHAT_CHANNEL_CAPACITY: usize = 256;
 const COMMAND_CHANNEL_CAPACITY: usize = 64;
 
 pub struct AppState {
@@ -21,6 +22,10 @@ pub struct AppState {
 
     // broadcast: stream events (1 producer → N consumers)
     pub event_tx: broadcast::Sender<StreamEvent>,
+
+    // broadcast: chat messages (IRC producer → TUI + Overlay Feed consumers).
+    // Mirrors event_tx so neither the TUI nor the http feed owns the chat.
+    pub chat_tx: broadcast::Sender<ChatMessage>,
 
     // mpsc: TUI commands → feature modules
     pub command_tx: mpsc::Sender<FeatureCommand>,
@@ -43,6 +48,7 @@ pub struct AppState {
 impl AppState {
     pub fn new(event_log_config: &EventLogConfig) -> Self {
         let (event_tx, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
+        let (chat_tx, _) = broadcast::channel(CHAT_CHANNEL_CAPACITY);
         let (command_tx, command_rx) = mpsc::channel(COMMAND_CHANNEL_CAPACITY);
 
         Self {
@@ -51,6 +57,7 @@ impl AppState {
             alerts_enabled: true,
             livepix_enabled: false,
             event_tx,
+            chat_tx,
             command_tx,
             command_rx,
             stats: StreamStats::new(),
@@ -64,6 +71,11 @@ impl AppState {
     /// Subscribe to the stream-event broadcast channel.
     pub fn subscribe_events(&self) -> broadcast::Receiver<StreamEvent> {
         self.event_tx.subscribe()
+    }
+
+    /// Subscribe to the chat broadcast channel (TUI + Overlay Feed).
+    pub fn subscribe_chat(&self) -> broadcast::Receiver<ChatMessage> {
+        self.chat_tx.subscribe()
     }
 
     /// Get a cloneable command sender for the TUI (or tests).

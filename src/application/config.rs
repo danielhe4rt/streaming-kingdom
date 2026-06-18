@@ -13,6 +13,39 @@ pub struct Config {
     pub privacy: PrivacyConfig,
     #[serde(default)]
     pub event_log: EventLogConfig,
+    #[serde(default)]
+    pub overlays: OverlaysConfig,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct OverlaysConfig {
+    /// Port the `http` Overlay server binds on (127.0.0.1). The only
+    /// configurable Overlays field for v1.
+    #[serde(default = "default_overlays_port")]
+    pub port: u16,
+}
+
+fn default_overlays_port() -> u16 {
+    1337
+}
+
+impl Default for OverlaysConfig {
+    fn default() -> Self {
+        Self {
+            port: default_overlays_port(),
+        }
+    }
+}
+
+impl OverlaysConfig {
+    /// Override the port from `OVERLAYS_PORT` when set.
+    pub fn apply_env_overrides(&mut self) {
+        if let Ok(v) = env::var("OVERLAYS_PORT")
+            && let Ok(port) = v.parse::<u16>()
+        {
+            self.port = port;
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -226,6 +259,7 @@ impl Default for Config {
                 ],
             },
             event_log: EventLogConfig::default(),
+            overlays: OverlaysConfig::default(),
         }
     }
 }
@@ -329,6 +363,7 @@ pub fn load() -> Result<Config, ConfigError> {
     config.obs.apply_env_overrides();
     config.twitch.apply_env_overrides();
     config.livepix.apply_env_overrides();
+    config.overlays.apply_env_overrides();
 
     Ok(config)
 }

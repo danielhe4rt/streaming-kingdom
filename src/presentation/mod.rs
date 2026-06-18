@@ -1,3 +1,4 @@
+pub mod http;
 mod input;
 pub mod state;
 pub mod theme;
@@ -57,13 +58,13 @@ pub async fn run(
     event_log_config: &EventLogConfig,
     mut hyprland_rx: mpsc::Receiver<AppEvent>,
     mut twitch_event_rx: mpsc::Receiver<AppEvent>,
-    mut chat_rx: mpsc::Receiver<ChatMessage>,
     twitch_channel: &str,
     tts_available: bool,
 ) -> io::Result<()> {
     let mut terminal = init_terminal()?;
     let mut tui = TuiState::new(event_log_config, twitch_channel, tts_available);
     let mut event_rx = app.subscribe_events();
+    let mut chat_rx = app.subscribe_chat();
     let cmd_tx = app.command_sender();
 
     // Enable the stream bar if waybar starts enabled
@@ -125,7 +126,7 @@ async fn event_loop(
     livepix_status_rx: &mut mpsc::Receiver<LivepixStatus>,
     hyprland_rx: &mut mpsc::Receiver<AppEvent>,
     twitch_event_rx: &mut mpsc::Receiver<AppEvent>,
-    chat_rx: &mut mpsc::Receiver<ChatMessage>,
+    chat_rx: &mut broadcast::Receiver<ChatMessage>,
 ) -> io::Result<()> {
     let mut prev_waybar_enabled = app.waybar_enabled;
     let mut prev_privacy_enabled = app.privacy_enabled;
@@ -300,18 +301,21 @@ async fn event_loop(
         }
 
         // Drain Twitch IRC chat messages into chat buffer and event log.
+        // The chat broadcast may report Lagged if a burst overflows the buffer;
+        // try_recv returns Err in that case, harmlessly ending this drain early.
         while let Ok(msg) = chat_rx.try_recv() {
             tui.twitch_chat.connected = true;
             tui.twitch_chat.message_count += 1;
 
+            let text = msg.plain_text();
             tui.push_chat(ChatEntry {
                 username: msg.username.clone(),
-                text: msg.text.clone(),
+                text: text.clone(),
             });
 
             app.log_event(AppEvent::ChatMessage {
                 username: msg.username,
-                text: msg.text,
+                text,
             });
         }
 

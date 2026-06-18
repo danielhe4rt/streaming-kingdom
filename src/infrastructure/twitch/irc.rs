@@ -1,9 +1,9 @@
 use std::time::Duration;
 
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc};
 use tokio::time;
 use twitch_irc::login::StaticLoginCredentials;
-use twitch_irc::message::ServerMessage;
+use twitch_irc::message::{PrivmsgMessage, ServerMessage};
 use twitch_irc::{ClientConfig, SecureTCPTransport, TwitchIRCClient};
 
 use crate::domain::{AppEvent, ChatMessage};
@@ -26,7 +26,7 @@ impl ChatClient {
         }
     }
 
-    pub async fn run(self, tx: mpsc::Sender<ChatMessage>, event_tx: mpsc::Sender<AppEvent>) {
+    pub async fn run(self, tx: broadcast::Sender<ChatMessage>, event_tx: mpsc::Sender<AppEvent>) {
         let mut delay = INITIAL_RECONNECT_DELAY;
 
         loop {
@@ -45,7 +45,7 @@ impl ChatClient {
 
     async fn connect_and_listen(
         &self,
-        tx: &mpsc::Sender<ChatMessage>,
+        tx: &broadcast::Sender<ChatMessage>,
         event_tx: &mpsc::Sender<AppEvent>,
     ) {
         let authenticated = self.login_name.is_some() && self.oauth_token.is_some();
@@ -99,14 +99,26 @@ impl ChatClient {
 
         while let Some(message) = incoming.recv().await {
             if let ServerMessage::Privmsg(msg) = message {
-                let _ = tx
-                    .send(ChatMessage {
-                        username: msg.sender.name,
-                        text: msg.message_text,
-                        channel: msg.channel_login,
-                    })
-                    .await;
+                // broadcast::send errors only when there are no receivers yet;
+                // safe to ignore for a fire-and-forget chat fan-out.
+                let _ = tx.send(enrich_privmsg(msg));
             }
         }
     }
+}
+
+/// M1 — chat enrichment (pure): `Privmsg → ChatMessage`.
+///
+/// Text-only for this slice: the whole body becomes a single text fragment and
+/// the author's Twitch chat colour is carried through (with a fallback). Emote
+/// range splitting and badge collection arrive in later slices.
+fn enrich_privmsg(msg: PrivmsgMessage) -> ChatMessage {
+    let color = msg.name_color.map(|c| format!("#{:02X}{:02X}{:02X}", c.r, c.g, c.b));
+    ChatMessage::from_text(
+        msg.message_id,
+        msg.sender.name,
+        color.as_deref(),
+        msg.channel_login,
+        msg.message_text,
+    )
 }
