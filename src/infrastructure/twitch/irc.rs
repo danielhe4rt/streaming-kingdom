@@ -7,7 +7,7 @@ use twitch_irc::message::{PrivmsgMessage, ServerMessage};
 use twitch_irc::{ClientConfig, SecureTCPTransport, TwitchIRCClient};
 
 use super::badges::BadgeMap;
-use crate::domain::{AppEvent, ChatBadge, ChatMessage};
+use crate::domain::{AppEvent, ChatBadge, ChatMessage, EmoteSpan};
 
 const MAX_RECONNECT_DELAY: Duration = Duration::from_secs(120);
 const INITIAL_RECONNECT_DELAY: Duration = Duration::from_secs(1);
@@ -119,10 +119,12 @@ impl ChatClient {
 
 /// Chat enrichment (pure): `Privmsg → ChatMessage`.
 ///
-/// The whole body becomes a single text fragment and the author's Twitch chat
-/// colour is carried through (with a fallback). The author's native badges
-/// (M1) are captured from the message tags and resolved to CDN urls against the
-/// Helix [`BadgeMap`] (M2). Emote range splitting arrives in a later slice.
+/// The body is split by the native Twitch emote ranges from the IRC `emotes`
+/// tag into ordered fragments (M1: text runs interleaved with single emotes,
+/// each emote resolved to its CDN url from the id). The author's Twitch chat
+/// colour is carried through (with a fallback), and their native badges (M1)
+/// are captured from the tags and resolved to CDN urls against the Helix
+/// [`BadgeMap`] (M2).
 fn enrich_privmsg(msg: PrivmsgMessage, badge_map: &BadgeMap) -> ChatMessage {
     let color = msg.name_color.map(|c| format!("#{:02X}{:02X}{:02X}", c.r, c.g, c.b));
 
@@ -135,12 +137,21 @@ fn enrich_privmsg(msg: PrivmsgMessage, badge_map: &BadgeMap) -> ChatMessage {
         .collect();
     let badges = badge_map.resolve_all(&parsed);
 
-    ChatMessage::from_text(
+    // twitch-irc already parsed (and de-bugged) the `emotes` tag into char
+    // ranges sorted by appearance; lift them into domain spans for splitting.
+    let emotes: Vec<EmoteSpan> = msg
+        .emotes
+        .iter()
+        .map(|e| EmoteSpan::new(&e.id, e.char_range.start, e.char_range.end))
+        .collect();
+
+    ChatMessage::from_fragments(
         msg.message_id,
         msg.sender.name,
         color.as_deref(),
         msg.channel_login,
-        msg.message_text,
+        &msg.message_text,
+        &emotes,
     )
     .with_badges(badges)
 }

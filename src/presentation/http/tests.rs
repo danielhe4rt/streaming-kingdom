@@ -10,7 +10,7 @@ use tokio::io::AsyncReadExt;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
 
-use crate::domain::{ChatBadge, ChatMessage};
+use crate::domain::{ChatBadge, ChatMessage, EmoteSpan};
 
 use super::{routes, OverlayState};
 
@@ -108,4 +108,60 @@ async fn feed_streams_chat_message_as_dto() {
     // The resolved badge url rides along on the feed DTO.
     assert!(acc.contains("\"setId\":\"moderator\""), "got: {acc}");
     assert!(acc.contains("\"url\":\"https://cdn/mod.png\""), "got: {acc}");
+}
+
+#[tokio::test]
+async fn feed_carries_ordered_emote_fragments() {
+    let (addr, chat_tx) = boot_server().await;
+
+    let mut stream = tokio::net::TcpStream::connect(addr).await.unwrap();
+    let request = "GET /overlay/feed HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\n\r\n";
+    tokio::io::AsyncWriteExt::write_all(&mut stream, request.as_bytes())
+        .await
+        .unwrap();
+
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    // "hey Kappa" → text run then a single native emote fragment.
+    chat_tx
+        .send(ChatMessage::from_fragments(
+            "msg-emote",
+            "randers",
+            Some("#19E6E6"),
+            "rustlang",
+            "hey Kappa",
+            &[EmoteSpan::new("25", 4, 9)],
+        ))
+        .unwrap();
+
+    let mut buf = vec![0u8; 4096];
+    let mut acc = String::new();
+    let read = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let n = stream.read(&mut buf).await.unwrap();
+            if n == 0 {
+                break;
+            }
+            acc.push_str(&String::from_utf8_lossy(&buf[..n]));
+            if acc.contains("msg-emote") {
+                break;
+            }
+        }
+    })
+    .await;
+
+    assert!(read.is_ok(), "timed out waiting for SSE frame; got: {acc}");
+    // Ordered fragments: a text run carrying "hey ", then an emote with its
+    // CDN url derived from the id, in original order.
+    assert!(acc.contains("\"kind\":\"text\""), "got: {acc}");
+    assert!(acc.contains("\"kind\":\"emote\""), "got: {acc}");
+    assert!(acc.contains("\"id\":\"25\""), "got: {acc}");
+    assert!(
+        acc.contains("static-cdn.jtvnw.net/emoticons/v2/25/default/dark/3.0"),
+        "got: {acc}"
+    );
+    // The text run precedes the emote in the serialized fragment array.
+    let text_at = acc.find("\"kind\":\"text\"").unwrap();
+    let emote_at = acc.find("\"kind\":\"emote\"").unwrap();
+    assert!(text_at < emote_at, "text fragment should precede emote; got: {acc}");
 }
