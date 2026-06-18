@@ -6,7 +6,8 @@ use twitch_irc::login::StaticLoginCredentials;
 use twitch_irc::message::{PrivmsgMessage, ServerMessage};
 use twitch_irc::{ClientConfig, SecureTCPTransport, TwitchIRCClient};
 
-use crate::domain::{AppEvent, ChatMessage};
+use super::badges::BadgeMap;
+use crate::domain::{AppEvent, ChatBadge, ChatMessage};
 
 const MAX_RECONNECT_DELAY: Duration = Duration::from_secs(120);
 const INITIAL_RECONNECT_DELAY: Duration = Duration::from_secs(1);
@@ -15,14 +16,23 @@ pub struct ChatClient {
     channel: String,
     oauth_token: Option<String>,
     login_name: Option<String>,
+    /// Pre-resolved Helix `set/version → url` badge map (M2). Read-only after
+    /// startup, so the adapter just looks up each author's badges per message.
+    badges: BadgeMap,
 }
 
 impl ChatClient {
-    pub fn new(channel: String, login_name: Option<String>, oauth_token: Option<String>) -> Self {
+    pub fn new(
+        channel: String,
+        login_name: Option<String>,
+        oauth_token: Option<String>,
+        badges: BadgeMap,
+    ) -> Self {
         Self {
             channel,
             oauth_token,
             login_name,
+            badges,
         }
     }
 
@@ -101,19 +111,30 @@ impl ChatClient {
             if let ServerMessage::Privmsg(msg) = message {
                 // broadcast::send errors only when there are no receivers yet;
                 // safe to ignore for a fire-and-forget chat fan-out.
-                let _ = tx.send(enrich_privmsg(msg));
+                let _ = tx.send(enrich_privmsg(msg, &self.badges));
             }
         }
     }
 }
 
-/// M1 — chat enrichment (pure): `Privmsg → ChatMessage`.
+/// Chat enrichment (pure): `Privmsg → ChatMessage`.
 ///
-/// Text-only for this slice: the whole body becomes a single text fragment and
-/// the author's Twitch chat colour is carried through (with a fallback). Emote
-/// range splitting and badge collection arrive in later slices.
-fn enrich_privmsg(msg: PrivmsgMessage) -> ChatMessage {
+/// The whole body becomes a single text fragment and the author's Twitch chat
+/// colour is carried through (with a fallback). The author's native badges
+/// (M1) are captured from the message tags and resolved to CDN urls against the
+/// Helix [`BadgeMap`] (M2). Emote range splitting arrives in a later slice.
+fn enrich_privmsg(msg: PrivmsgMessage, badge_map: &BadgeMap) -> ChatMessage {
     let color = msg.name_color.map(|c| format!("#{:02X}{:02X}{:02X}", c.r, c.g, c.b));
+
+    // twitch-irc already parsed the `badges` tag into set/version pairs; lift
+    // them into the domain type, then resolve their urls against the map.
+    let parsed: Vec<ChatBadge> = msg
+        .badges
+        .iter()
+        .map(|b| ChatBadge::new(&b.name, &b.version))
+        .collect();
+    let badges = badge_map.resolve_all(&parsed);
+
     ChatMessage::from_text(
         msg.message_id,
         msg.sender.name,
@@ -121,4 +142,5 @@ fn enrich_privmsg(msg: PrivmsgMessage) -> ChatMessage {
         msg.channel_login,
         msg.message_text,
     )
+    .with_badges(badges)
 }

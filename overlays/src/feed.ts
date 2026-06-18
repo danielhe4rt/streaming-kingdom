@@ -19,12 +19,21 @@ export interface EmoteFragmentDto {
 
 export type FragmentDto = TextFragmentDto | EmoteFragmentDto;
 
+// One resolved native Twitch badge. The Rust side drops resolver misses, so a
+// badge that reaches the feed always carries a renderable `url`.
+export interface ChatBadgeDto {
+  setId: string;
+  version: string;
+  url: string;
+}
+
 export interface ChatMessageDto {
   kind: "chatMessage";
   msgId: string;
   username: string;
   color: string;
   channel: string;
+  badges: ChatBadgeDto[];
   fragments: FragmentDto[];
 }
 

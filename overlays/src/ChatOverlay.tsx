@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import type { ChatMessageDto, FeedEventDto, FragmentDto } from "./feed";
+import type {
+  ChatBadgeDto,
+  ChatMessageDto,
+  FeedEventDto,
+  FragmentDto,
+} from "./feed";
 
 // Keep the rendered chat bounded so the Overlay never grows a scrollbar and
 // old messages age out. Later slices add time-based hideAfter; for the tracer
@@ -26,9 +31,23 @@ function Fragment({ fragment }: { fragment: FragmentDto }) {
   return <span>{fragment.text}</span>;
 }
 
+function Badge({ badge }: { badge: ChatBadgeDto }) {
+  return (
+    <img
+      src={badge.url}
+      alt={`${badge.setId} badge`}
+      title={badge.setId}
+      className="mr-1 inline-block h-5 w-5 align-middle"
+    />
+  );
+}
+
 function ChatLine({ message }: { message: ChatMessageDto }) {
   return (
     <div className="px-3 py-1 text-2xl leading-snug [text-shadow:_0_2px_4px_rgb(0_0_0_/_90%)]">
+      {message.badges.map((badge) => (
+        <Badge key={`${badge.setId}/${badge.version}`} badge={badge} />
+      ))}
       <span className="font-bold" style={{ color: message.color }}>
         {message.username}
       </span>

@@ -194,6 +194,20 @@ async fn main() -> io::Result<()> {
         cfg.overlays.port
     )));
 
+    // Resolve Twitch chat badges once at startup (Helix global + channel) into
+    // a set/version → url map the IRC adapter looks up per message (M2).
+    let badge_map = if !cfg.twitch.oauth_token.is_empty() && !cfg.twitch.client_id.is_empty() {
+        infrastructure::twitch::badges::fetch(
+            &reqwest::Client::new(),
+            &cfg.twitch.client_id,
+            &cfg.twitch.oauth_token,
+            &cfg.twitch.broadcaster_user_id,
+        )
+        .await
+    } else {
+        infrastructure::twitch::BadgeMap::default()
+    };
+
     // Spawn Twitch IRC chat client (fans out over the chat broadcast channel).
     let chat_tx = app.chat_tx.clone();
     if !cfg.twitch.channel.is_empty() {
@@ -212,6 +226,7 @@ async fn main() -> io::Result<()> {
             cfg.twitch.channel.clone(),
             login_name,
             oauth_token,
+            badge_map,
         );
         tokio::spawn(chat.run(chat_tx, chat_event_tx));
         app.log_event(AppEvent::Info(format!(

@@ -10,7 +10,7 @@ use tokio::io::AsyncReadExt;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
 
-use crate::domain::ChatMessage;
+use crate::domain::{ChatBadge, ChatMessage};
 
 use super::{routes, OverlayState};
 
@@ -66,13 +66,20 @@ async fn feed_streams_chat_message_as_dto() {
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     chat_tx
-        .send(ChatMessage::from_text(
-            "msg-42",
-            "danielhe4rt",
-            Some("#FF7F50"),
-            "rustlang",
-            "hello overlay",
-        ))
+        .send(
+            ChatMessage::from_text(
+                "msg-42",
+                "danielhe4rt",
+                Some("#FF7F50"),
+                "rustlang",
+                "hello overlay",
+            )
+            .with_badges(vec![ChatBadge {
+                set: "moderator".into(),
+                version: "1".into(),
+                url: Some("https://cdn/mod.png".into()),
+            }]),
+        )
         .unwrap();
 
     // Read until we see the SSE data frame for our message (bounded by timeout).
@@ -98,4 +105,7 @@ async fn feed_streams_chat_message_as_dto() {
     assert!(acc.contains("\"msgId\":\"msg-42\""), "got: {acc}");
     assert!(acc.contains("\"color\":\"#FF7F50\""), "got: {acc}");
     assert!(acc.contains("hello overlay"), "got: {acc}");
+    // The resolved badge url rides along on the feed DTO.
+    assert!(acc.contains("\"setId\":\"moderator\""), "got: {acc}");
+    assert!(acc.contains("\"url\":\"https://cdn/mod.png\""), "got: {acc}");
 }

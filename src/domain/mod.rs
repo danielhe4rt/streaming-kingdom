@@ -5,7 +5,7 @@ pub mod events;
 pub mod stats;
 
 pub use app_event::{AppEvent, AppEventEntry, EventGroup};
-pub use chat::{ChatMessage, MessageFragment};
+pub use chat::{ChatBadge, ChatMessage, MessageFragment};
 pub use commands::FeatureCommand;
 pub use events::{StreamEvent, SubTier};
 pub use stats::StreamStats;
