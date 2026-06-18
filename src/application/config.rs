@@ -85,6 +85,28 @@ fn default_true() -> bool {
     true
 }
 
+impl ObsConfig {
+    /// Override fields from environment variables when set.
+    ///
+    /// Env vars: `OBS_HOST`, `OBS_PORT`, `OBS_PASSWORD`, `OBS_CAPTURE_SOURCE`.
+    pub fn apply_env_overrides(&mut self) {
+        if let Ok(v) = env::var("OBS_HOST") {
+            self.host = v;
+        }
+        if let Ok(v) = env::var("OBS_PORT") {
+            if let Ok(port) = v.parse::<u16>() {
+                self.port = port;
+            }
+        }
+        if let Ok(v) = env::var("OBS_PASSWORD") {
+            self.password = v;
+        }
+        if let Ok(v) = env::var("OBS_CAPTURE_SOURCE") {
+            self.capture_source = v;
+        }
+    }
+}
+
 impl LivepixConfig {
     /// Override empty fields with environment variables from .env.
     pub fn apply_env_overrides(&mut self) {
@@ -213,6 +235,34 @@ fn config_path() -> Result<PathBuf, ConfigError> {
     Ok(config_dir.join("streams-toolkit").join("config.toml"))
 }
 
+/// Persist updated Twitch tokens back to config.toml.
+///
+/// Reads the existing config, updates only the twitch token fields,
+/// and writes it back to avoid clobbering other values.
+pub fn save_twitch_tokens(oauth_token: &str, refresh_token: &str) -> Result<(), ConfigError> {
+    let path = config_path()?;
+    let contents = fs::read_to_string(&path)?;
+    let mut doc: toml::Table = contents
+        .parse::<toml::Table>()
+        .map_err(ConfigError::Parse)?;
+
+    if let Some(twitch) = doc.get_mut("twitch").and_then(|v| v.as_table_mut()) {
+        twitch.insert(
+            "oauth_token".into(),
+            toml::Value::String(oauth_token.to_string()),
+        );
+        twitch.insert(
+            "refresh_token".into(),
+            toml::Value::String(refresh_token.to_string()),
+        );
+    }
+
+    let new_contents = toml::to_string_pretty(&doc)?;
+    fs::write(&path, new_contents)?;
+    tracing::info!("persisted refreshed tokens to {}", path.display());
+    Ok(())
+}
+
 #[derive(Debug)]
 pub enum ConfigError {
     NoConfigDir,
@@ -276,6 +326,7 @@ pub fn load() -> Result<Config, ConfigError> {
         c
     };
 
+    config.obs.apply_env_overrides();
     config.twitch.apply_env_overrides();
     config.livepix.apply_env_overrides();
 

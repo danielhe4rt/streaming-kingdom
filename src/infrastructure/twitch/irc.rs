@@ -1,9 +1,15 @@
+use std::time::Duration;
+
 use tokio::sync::mpsc;
+use tokio::time;
 use twitch_irc::login::StaticLoginCredentials;
 use twitch_irc::message::ServerMessage;
 use twitch_irc::{ClientConfig, SecureTCPTransport, TwitchIRCClient};
 
 use crate::domain::{AppEvent, ChatMessage};
+
+const MAX_RECONNECT_DELAY: Duration = Duration::from_secs(120);
+const INITIAL_RECONNECT_DELAY: Duration = Duration::from_secs(1);
 
 pub struct ChatClient {
     channel: String,
@@ -28,6 +34,27 @@ impl ChatClient {
         self,
         tx: mpsc::Sender<ChatMessage>,
         event_tx: mpsc::Sender<AppEvent>,
+    ) {
+        let mut delay = INITIAL_RECONNECT_DELAY;
+
+        loop {
+            self.connect_and_listen(&tx, &event_tx).await;
+
+            let _ = event_tx
+                .send(AppEvent::Error(format!(
+                    "Twitch chat disconnected, reconnecting in {delay:?}"
+                )))
+                .await;
+
+            time::sleep(delay).await;
+            delay = (delay * 2).min(MAX_RECONNECT_DELAY);
+        }
+    }
+
+    async fn connect_and_listen(
+        &self,
+        tx: &mpsc::Sender<ChatMessage>,
+        event_tx: &mpsc::Sender<AppEvent>,
     ) {
         let authenticated = self.login_name.is_some() && self.oauth_token.is_some();
 
@@ -70,7 +97,11 @@ impl ChatClient {
             .send(AppEvent::Info(format!(
                 "Twitch chat joined #{}{}",
                 self.channel,
-                if authenticated { " (authenticated)" } else { " (anonymous)" }
+                if authenticated {
+                    " (authenticated)"
+                } else {
+                    " (anonymous)"
+                }
             )))
             .await;
 
@@ -85,12 +116,5 @@ impl ChatClient {
                     .await;
             }
         }
-
-        // Stream ended — connection lost
-        let _ = event_tx
-            .send(AppEvent::Error(
-                "Twitch chat disconnected".into(),
-            ))
-            .await;
     }
 }

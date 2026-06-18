@@ -192,6 +192,21 @@ impl TwitchClient {
                             let _ = sink.close().await;
                             return Ok(ReconnectAction::ServerReconnect(url));
                         }
+                        MessageResult::TokenRevoked => {
+                            tracing::warn!("authorization revoked, attempting token refresh");
+                            let _ = sink.close().await;
+                            // Attempt refresh; if it fails, the outer loop
+                            // will apply backoff and retry.
+                            if let Err(e) = self.refresh_token().await {
+                                tracing::error!("token refresh after revocation failed: {e}");
+                                return Err(ClientError::Http(format!(
+                                    "token refresh after revocation failed: {e}"
+                                )));
+                            }
+                            // Refresh succeeded — reconnect from scratch to
+                            // re-subscribe with the new token.
+                            return Ok(ReconnectAction::Disconnected);
+                        }
                     }
                 }
                 Ok(Some(Ok(Message::Close(_)))) => {
@@ -234,7 +249,10 @@ impl TwitchClient {
     }
 
     /// Create EventSub subscriptions via the Helix REST API.
-    async fn subscribe_events(&self, session_id: &str) -> Result<(), ClientError> {
+    ///
+    /// If a subscription returns 401, the token is refreshed once and all
+    /// remaining subscriptions (including the failed one) are retried.
+    async fn subscribe_events(&mut self, session_id: &str) -> Result<(), ClientError> {
         if self.config.broadcaster_user_id.is_empty() {
             tracing::warn!("broadcaster_user_id is empty, skipping EventSub subscriptions");
             let _ = self
@@ -246,55 +264,12 @@ impl TwitchClient {
             return Ok(());
         }
 
+        let mut token_refreshed = false;
+
         for def in SUBSCRIPTIONS {
-            let mut condition = serde_json::Map::new();
+            let status = self.try_subscribe(def, session_id).await?;
 
-            if def.uses_broadcaster {
-                condition.insert(
-                    "broadcaster_user_id".into(),
-                    Value::String(self.config.broadcaster_user_id.clone()),
-                );
-            } else {
-                // channel.raid uses to_broadcaster_user_id
-                condition.insert(
-                    "to_broadcaster_user_id".into(),
-                    Value::String(self.config.broadcaster_user_id.clone()),
-                );
-            }
-
-            if def.needs_moderator {
-                condition.insert(
-                    "moderator_user_id".into(),
-                    Value::String(self.config.broadcaster_user_id.clone()),
-                );
-            }
-
-            let body = serde_json::json!({
-                "type": def.sub_type,
-                "version": def.version,
-                "condition": condition,
-                "transport": {
-                    "method": "websocket",
-                    "session_id": session_id,
-                }
-            });
-
-            // WebSocket transport requires a user access token, not an app token.
-            // App tokens are only valid with webhook transport.
-            let token = &self.config.oauth_token;
-
-            let resp = self
-                .http
-                .post(HELIX_SUBSCRIPTIONS_URL)
-                .header("Authorization", format!("Bearer {token}"))
-                .header("Client-Id", &self.config.client_id)
-                .header("Content-Type", "application/json")
-                .json(&body)
-                .send()
-                .await
-                .map_err(|e| ClientError::Http(e.to_string()))?;
-
-            if resp.status().is_success() {
+            if status.is_success() {
                 tracing::info!(sub_type = def.sub_type, "subscribed");
                 let _ = self
                     .app_event_tx
@@ -303,13 +278,43 @@ impl TwitchClient {
                         def.sub_type
                     )))
                     .await;
+                continue;
+            }
+
+            // On 401, refresh the token once and retry this subscription.
+            if status == reqwest::StatusCode::UNAUTHORIZED && !token_refreshed {
+                tracing::warn!("got 401, attempting token refresh");
+                self.refresh_token().await?;
+                token_refreshed = true;
+
+                let retry_status = self.try_subscribe(def, session_id).await?;
+                if retry_status.is_success() {
+                    tracing::info!(sub_type = def.sub_type, "subscribed (after refresh)");
+                    let _ = self
+                        .app_event_tx
+                        .send(AppEvent::Info(format!(
+                            "Twitch: subscribed to {} (after token refresh)",
+                            def.sub_type
+                        )))
+                        .await;
+                } else {
+                    tracing::error!(
+                        sub_type = def.sub_type,
+                        status = %retry_status,
+                        "subscription failed even after token refresh"
+                    );
+                    let _ = self
+                        .app_event_tx
+                        .send(AppEvent::Error(format!(
+                            "Twitch: {} failed ({}) after token refresh",
+                            def.sub_type, retry_status
+                        )))
+                        .await;
+                }
             } else {
-                let status = resp.status();
-                let body = resp.text().await.unwrap_or_default();
                 tracing::error!(
                     sub_type = def.sub_type,
                     status = %status,
-                    body,
                     "subscription failed"
                 );
                 let _ = self
@@ -325,6 +330,73 @@ impl TwitchClient {
         }
 
         Ok(())
+    }
+
+    /// Send a single EventSub subscription request, returning the HTTP status.
+    async fn try_subscribe(
+        &self,
+        def: &SubDef,
+        session_id: &str,
+    ) -> Result<reqwest::StatusCode, ClientError> {
+        let mut condition = serde_json::Map::new();
+
+        if def.uses_broadcaster {
+            condition.insert(
+                "broadcaster_user_id".into(),
+                Value::String(self.config.broadcaster_user_id.clone()),
+            );
+        } else {
+            // channel.raid uses to_broadcaster_user_id
+            condition.insert(
+                "to_broadcaster_user_id".into(),
+                Value::String(self.config.broadcaster_user_id.clone()),
+            );
+        }
+
+        if def.needs_moderator {
+            condition.insert(
+                "moderator_user_id".into(),
+                Value::String(self.config.broadcaster_user_id.clone()),
+            );
+        }
+
+        let body = serde_json::json!({
+            "type": def.sub_type,
+            "version": def.version,
+            "condition": condition,
+            "transport": {
+                "method": "websocket",
+                "session_id": session_id,
+            }
+        });
+
+        // WebSocket transport requires a user access token, not an app token.
+        let token = &self.config.oauth_token;
+
+        let resp = self
+            .http
+            .post(HELIX_SUBSCRIPTIONS_URL)
+            .header("Authorization", format!("Bearer {token}"))
+            .header("Client-Id", &self.config.client_id)
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| ClientError::Http(e.to_string()))?;
+
+        let status = resp.status();
+
+        if !status.is_success() {
+            let body_text = resp.text().await.unwrap_or_default();
+            tracing::debug!(
+                sub_type = def.sub_type,
+                status = %status,
+                body = body_text,
+                "subscription response"
+            );
+        }
+
+        Ok(status)
     }
 
     /// Handle a single text message from the WebSocket.
@@ -392,6 +464,10 @@ impl TwitchClient {
                     .try_send(AppEvent::Error(format!(
                         "Twitch: {sub_type} subscription revoked ({reason})"
                     )));
+
+                if reason == "authorization_revoked" {
+                    return MessageResult::TokenRevoked;
+                }
             }
 
             other => {
@@ -404,16 +480,27 @@ impl TwitchClient {
 
     /// Attempt to refresh the OAuth token using the refresh_token.
     ///
-    /// Returns the new access token on success.
-    #[allow(dead_code)]
-    pub(crate) async fn refresh_token(&self) -> Result<String, ClientError> {
+    /// On success, updates `self.config.oauth_token` and `self.config.refresh_token`
+    /// in memory and persists them to config.toml.
+    async fn refresh_token(&mut self) -> Result<(), ClientError> {
+        if self.config.refresh_token.is_empty() {
+            return Err(ClientError::Http("no refresh_token configured".into()));
+        }
+
+        tracing::info!("refreshing OAuth token...");
+        let _ = self
+            .app_event_tx
+            .send(AppEvent::Info("Twitch: refreshing OAuth token...".into()))
+            .await;
+
         let resp = self
             .http
             .post(TOKEN_REFRESH_URL)
             .form(&[
                 ("grant_type", "refresh_token"),
-                ("refresh_token", &self.config.refresh_token),
-                ("client_id", &self.config.client_id),
+                ("refresh_token", self.config.refresh_token.as_str()),
+                ("client_id", self.config.client_id.as_str()),
+                ("client_secret", self.config.client_secret.as_str()),
             ])
             .send()
             .await
@@ -421,6 +508,12 @@ impl TwitchClient {
 
         if !resp.status().is_success() {
             let body = resp.text().await.unwrap_or_default();
+            let _ = self
+                .app_event_tx
+                .send(AppEvent::Error(format!(
+                    "Twitch: token refresh failed: {body}"
+                )))
+                .await;
             return Err(ClientError::Http(format!("token refresh failed: {body}")));
         }
 
@@ -429,10 +522,33 @@ impl TwitchClient {
             .await
             .map_err(|e| ClientError::Http(e.to_string()))?;
 
-        body["access_token"]
+        let new_access = body["access_token"]
             .as_str()
-            .map(|s| s.to_string())
-            .ok_or_else(|| ClientError::Http("no access_token in response".into()))
+            .ok_or_else(|| ClientError::Http("no access_token in refresh response".into()))?
+            .to_string();
+
+        let new_refresh = body["refresh_token"]
+            .as_str()
+            .ok_or_else(|| ClientError::Http("no refresh_token in refresh response".into()))?
+            .to_string();
+
+        self.config.oauth_token = new_access.clone();
+        self.config.refresh_token = new_refresh.clone();
+
+        // Persist to disk (best-effort — don't fail the refresh if disk write fails)
+        if let Err(e) = crate::application::config::save_twitch_tokens(&new_access, &new_refresh) {
+            tracing::warn!("failed to persist refreshed tokens: {e}");
+        }
+
+        tracing::info!("OAuth token refreshed successfully");
+        let _ = self
+            .app_event_tx
+            .send(AppEvent::Info(
+                "Twitch: token refreshed successfully".into(),
+            ))
+            .await;
+
+        Ok(())
     }
 }
 
@@ -589,6 +705,8 @@ enum ReconnectAction {
 enum MessageResult {
     Continue,
     Reconnect(String),
+    /// Token was revoked — caller should attempt refresh and reconnect.
+    TokenRevoked,
 }
 
 #[derive(Debug)]

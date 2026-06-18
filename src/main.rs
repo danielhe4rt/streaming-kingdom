@@ -61,10 +61,69 @@ async fn main() -> io::Result<()> {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
-    let cfg = application::config::load().map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    let mut cfg = application::config::load().map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
 
     // Ensure the stream data file exists so waybar custom modules don't fail
     infrastructure::waybar::ensure_data_file()?;
+
+    // ── Twitch token validation / OAuth flow ──────────────────────────────
+    // If client_id + client_secret are configured, ensure we have a valid token.
+    // Flow: validate existing token → try refresh → browser OAuth as last resort.
+    if !cfg.twitch.client_id.is_empty() && !cfg.twitch.client_secret.is_empty() {
+        let token_valid = infrastructure::twitch::auth::validate_token(&cfg.twitch.oauth_token).await;
+
+        if !token_valid {
+            tracing::info!("Twitch token missing or invalid, attempting to obtain a valid token");
+
+            // Try refreshing first if we have a refresh_token.
+            let mut refreshed = false;
+            if !cfg.twitch.refresh_token.is_empty() {
+                tracing::info!("attempting token refresh...");
+                match refresh_twitch_token(&cfg.twitch).await {
+                    Ok((access, refresh)) => {
+                        cfg.twitch.oauth_token = access;
+                        cfg.twitch.refresh_token = refresh;
+                        refreshed = true;
+                        tracing::info!("token refreshed successfully");
+                    }
+                    Err(e) => {
+                        tracing::warn!("token refresh failed: {e}");
+                    }
+                }
+            }
+
+            // If refresh didn't work, run the browser OAuth flow.
+            if !refreshed {
+                tracing::info!("opening browser for Twitch authorization...");
+                match infrastructure::twitch::auth::authenticate(
+                    &cfg.twitch.client_id,
+                    &cfg.twitch.client_secret,
+                )
+                .await
+                {
+                    Ok(tokens) => {
+                        cfg.twitch.oauth_token = tokens.access_token;
+                        cfg.twitch.refresh_token = tokens.refresh_token;
+                        tracing::info!("Twitch authorization completed");
+                    }
+                    Err(e) => {
+                        tracing::error!("Twitch authorization failed: {e}");
+                        eprintln!("Warning: Twitch authorization failed: {e}");
+                    }
+                }
+            }
+
+            // Persist whatever tokens we obtained.
+            if !cfg.twitch.oauth_token.is_empty() {
+                if let Err(e) = application::config::save_twitch_tokens(
+                    &cfg.twitch.oauth_token,
+                    &cfg.twitch.refresh_token,
+                ) {
+                    tracing::warn!("failed to save tokens: {e}");
+                }
+            }
+        }
+    }
 
     let mut app = application::AppState::new(&cfg.event_log);
     app.log_event(AppEvent::Info("streams-toolkit started".into()));
@@ -168,4 +227,39 @@ async fn main() -> io::Result<()> {
         tts_available,
     )
     .await
+}
+
+/// Standalone token refresh used at startup (before TwitchClient exists).
+async fn refresh_twitch_token(
+    twitch: &application::config::TwitchConfig,
+) -> Result<(String, String), String> {
+    let resp = reqwest::Client::new()
+        .post("https://id.twitch.tv/oauth2/token")
+        .form(&[
+            ("grant_type", "refresh_token"),
+            ("refresh_token", twitch.refresh_token.as_str()),
+            ("client_id", twitch.client_id.as_str()),
+            ("client_secret", twitch.client_secret.as_str()),
+        ])
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("refresh failed: {body}"));
+    }
+
+    let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+
+    let access = body["access_token"]
+        .as_str()
+        .ok_or("no access_token")?
+        .to_string();
+    let refresh = body["refresh_token"]
+        .as_str()
+        .ok_or("no refresh_token")?
+        .to_string();
+
+    Ok((access, refresh))
 }
