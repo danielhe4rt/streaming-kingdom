@@ -52,9 +52,7 @@ impl WaybarEvent {
             }
 
             StreamEvent::GiftSub {
-                username,
-                total,
-                ..
+                username, total, ..
             } => Some(Self {
                 event_type: "giftSubscriber".into(),
                 username: username.clone(),
@@ -71,9 +69,7 @@ impl WaybarEvent {
                 amount: Some(format!("{:.2}", *amount_cents as f64 / 100.0)),
             }),
 
-            StreamEvent::Cheer {
-                username, bits, ..
-            } => Some(Self {
+            StreamEvent::Cheer { username, bits, .. } => Some(Self {
                 event_type: "cheer".into(),
                 username: username.clone(),
                 amount: Some(bits.to_string()),
@@ -123,8 +119,7 @@ fn classify_sub(_tier: SubTier, months: u32) -> String {
 
 /// Write the recent events list to the JSON data file that waybar reads.
 pub fn write_data_file(path: &Path, events: &[WaybarEvent]) -> io::Result<()> {
-    let json = serde_json::to_string(events).map_err(|e| {
-        io::Error::new(io::ErrorKind::InvalidData, format!("json serialize: {e}"))
-    })?;
+    let json = serde_json::to_string(events)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("json serialize: {e}")))?;
     std::fs::write(path, json)
 }

@@ -1,10 +1,10 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use tokio::sync::mpsc;
 
-use crate::application::AppState;
-use crate::domain::FeatureCommand;
 use super::state::{Pane, TuiState};
 use super::ui::INTEGRATION_COUNT;
+use crate::application::AppState;
+use crate::domain::FeatureCommand;
 
 /// Handle a key event. Returns `true` when the app should quit.
 pub async fn handle_key(
@@ -63,10 +63,10 @@ pub async fn handle_key(
 
         // Toggle selected feature (only in Integrations pane)
         KeyCode::Char(' ') | KeyCode::Enter => {
-            if tui.focused_pane == Pane::Integrations {
-                if let Some(cmd) = toggle_command(tui.integration_cursor, app) {
-                    let _ = cmd_tx.send(cmd).await;
-                }
+            if tui.focused_pane == Pane::Integrations
+                && let Some(cmd) = toggle_command(tui.integration_cursor, app)
+            {
+                let _ = cmd_tx.send(cmd).await;
             }
         }
 

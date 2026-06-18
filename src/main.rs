@@ -17,9 +17,7 @@ fn sync_python_files() -> io::Result<()> {
     let config_dir = Path::new("/home/danielhe4rt/.config/streams-toolkit");
 
     // Files to sync: (source_relative_path, dest_relative_path)
-    let files_to_sync = vec![
-        ("scripts/stream_events.py", "scripts/stream_events.py"),
-    ];
+    let files_to_sync = vec![("scripts/stream_events.py", "scripts/stream_events.py")];
 
     for (src_rel, dst_rel) in files_to_sync {
         let src = project_dir.join(src_rel);
@@ -60,7 +58,7 @@ async fn main() -> io::Result<()> {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
-    let mut cfg = application::config::load().map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    let mut cfg = application::config::load().map_err(|e| io::Error::other(e.to_string()))?;
 
     // Ensure the stream data file exists so waybar custom modules don't fail
     infrastructure::waybar::ensure_data_file()?;
@@ -69,7 +67,8 @@ async fn main() -> io::Result<()> {
     // If client_id + client_secret are configured, ensure we have a valid token.
     // Flow: validate existing token → try refresh → browser OAuth as last resort.
     if !cfg.twitch.client_id.is_empty() && !cfg.twitch.client_secret.is_empty() {
-        let token_valid = infrastructure::twitch::auth::validate_token(&cfg.twitch.oauth_token).await;
+        let token_valid =
+            infrastructure::twitch::auth::validate_token(&cfg.twitch.oauth_token).await;
 
         if !token_valid {
             tracing::info!("Twitch token missing or invalid, attempting to obtain a valid token");
@@ -113,13 +112,13 @@ async fn main() -> io::Result<()> {
             }
 
             // Persist whatever tokens we obtained.
-            if !cfg.twitch.oauth_token.is_empty() {
-                if let Err(e) = application::config::save_twitch_tokens(
+            if !cfg.twitch.oauth_token.is_empty()
+                && let Err(e) = application::config::save_twitch_tokens(
                     &cfg.twitch.oauth_token,
                     &cfg.twitch.refresh_token,
-                ) {
-                    tracing::warn!("failed to save tokens: {e}");
-                }
+                )
+            {
+                tracing::warn!("failed to save tokens: {e}");
             }
         }
     }
@@ -147,12 +146,16 @@ async fn main() -> io::Result<()> {
         tokio::spawn(twitch.run());
         app.log_event(AppEvent::Info("Twitch EventSub connecting".into()));
     } else {
-        app.log_event(AppEvent::Info("Twitch not configured (need oauth_token + client_id)".into()));
+        app.log_event(AppEvent::Info(
+            "Twitch not configured (need oauth_token + client_id)".into(),
+        ));
     }
 
     // Create privacy monitor channels and spawn its task
-    let (privacy_cmd_tx, privacy_cmd_rx) = mpsc::channel::<infrastructure::hyprland::PrivacyCommand>(16);
-    let (privacy_status_tx, privacy_status_rx) = mpsc::channel::<infrastructure::hyprland::PrivacyStatus>(64);
+    let (privacy_cmd_tx, privacy_cmd_rx) =
+        mpsc::channel::<infrastructure::hyprland::PrivacyCommand>(16);
+    let (privacy_status_tx, privacy_status_rx) =
+        mpsc::channel::<infrastructure::hyprland::PrivacyStatus>(64);
 
     let _privacy_handle = infrastructure::hyprland::privacy_monitor::spawn(
         privacy_cmd_rx,
@@ -169,8 +172,10 @@ async fn main() -> io::Result<()> {
     let tts_available = tts_tx.is_some();
 
     // Create Livepix webhook server channels and spawn its task
-    let (livepix_cmd_tx, livepix_cmd_rx) = mpsc::channel::<infrastructure::livepix::LivepixCommand>(16);
-    let (livepix_status_tx, livepix_status_rx) = mpsc::channel::<infrastructure::livepix::LivepixStatus>(64);
+    let (livepix_cmd_tx, livepix_cmd_rx) =
+        mpsc::channel::<infrastructure::livepix::LivepixCommand>(16);
+    let (livepix_status_tx, livepix_status_rx) =
+        mpsc::channel::<infrastructure::livepix::LivepixStatus>(64);
 
     let _livepix_handle = infrastructure::livepix::spawn(
         livepix_cmd_rx,
@@ -194,7 +199,11 @@ async fn main() -> io::Result<()> {
         } else {
             None
         };
-        let chat = infrastructure::twitch::ChatClient::new(cfg.twitch.channel.clone(), login_name, oauth_token);
+        let chat = infrastructure::twitch::ChatClient::new(
+            cfg.twitch.channel.clone(),
+            login_name,
+            oauth_token,
+        );
         tokio::spawn(chat.run(chat_tx, chat_event_tx));
         app.log_event(AppEvent::Info(format!(
             "Twitch chat connecting to #{}",

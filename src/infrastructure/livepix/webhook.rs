@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
+use axum::Router;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
-use axum::Router;
 use serde::Deserialize;
-use tokio::sync::{broadcast, mpsc, Mutex};
+use tokio::sync::{Mutex, broadcast, mpsc};
 
 use crate::application::LivepixConfig;
 use crate::domain::StreamEvent;
@@ -100,8 +100,8 @@ async fn get_oauth_token(
         return Err(format!("OAuth returned {status}: {body}"));
     }
 
-    let token_data: OAuthToken =
-        serde_json::from_str(&body).map_err(|e| format!("failed to parse OAuth response: {e} -- body: {body}"))?;
+    let token_data: OAuthToken = serde_json::from_str(&body)
+        .map_err(|e| format!("failed to parse OAuth response: {e} -- body: {body}"))?;
 
     Ok(token_data.access_token)
 }
@@ -136,10 +136,7 @@ async fn fetch_message(state: &ServerState, message_id: &str) -> Result<MessageD
 
     let response = state
         .http_client
-        .get(format!(
-            "https://api.livepix.gg/v2/messages/{}",
-            message_id
-        ))
+        .get(format!("https://api.livepix.gg/v2/messages/{}", message_id))
         .bearer_auth(&token)
         .send()
         .await
@@ -231,24 +228,20 @@ async fn handle_webhook(
                         .spawn();
 
                     // Forward to TTS (non-blocking)
-                    if let Some(ref tts_tx) = state_clone.tts_tx {
-                        if tts_tx
+                    if let Some(ref tts_tx) = state_clone.tts_tx
+                        && tts_tx
                             .try_send(TtsRequest {
                                 text: message.message,
                                 username: message.username,
                             })
                             .is_err()
-                        {
-                            tracing::warn!("TTS queue full, dropping request");
-                        }
+                    {
+                        tracing::warn!("TTS queue full, dropping request");
                     }
                 }
                 Err(e) => {
                     tracing::error!("failed to fetch livepix message: {e}");
-                    let _ = state_clone
-                        .status_tx
-                        .send(LivepixStatus::Error(e))
-                        .await;
+                    let _ = state_clone.status_tx.send(LivepixStatus::Error(e)).await;
                 }
             }
         });
@@ -286,14 +279,7 @@ pub fn spawn(
                 None => return, // channel closed
             }
 
-            run_server(
-                &mut cmd_rx,
-                &status_tx,
-                &event_tx,
-                &tts_tx,
-                &config,
-            )
-            .await;
+            run_server(&mut cmd_rx, &status_tx, &event_tx, &tts_tx, &config).await;
         }
     })
 }
@@ -318,9 +304,7 @@ async fn run_server(
         }
         Err(e) => {
             tracing::error!("livepix: OAuth authentication failed: {e}");
-            let _ = status_tx
-                .send(LivepixStatus::OAuthError(e.clone()))
-                .await;
+            let _ = status_tx.send(LivepixStatus::OAuthError(e.clone())).await;
             let _ = status_tx.send(LivepixStatus::Stopped).await;
             return;
         }

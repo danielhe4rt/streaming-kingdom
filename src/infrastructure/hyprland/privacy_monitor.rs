@@ -200,9 +200,7 @@ async fn run_monitor(
             .find(|t| is_sensitive(t, &config.sensitive_patterns))
             .cloned()
             .unwrap_or_default();
-        let _ = status_tx
-            .send(PrivacyStatus::BlurEnabled { title })
-            .await;
+        let _ = status_tx.send(PrivacyStatus::BlurEnabled { title }).await;
     }
 
     loop {
@@ -252,11 +250,10 @@ async fn run_monitor(
                 match cmd {
                     Some(PrivacyCommand::Stop) | None => {
                         // Clean up: remove blur if active.
-                        if blur_active {
-                            if let Some(ref client) = obs_client {
+                        if blur_active
+                            && let Some(ref client) = obs_client {
                                 obs::disable_blur(client, capture_source).await;
                             }
-                        }
                         listener_handle.abort();
                         let _ = status_tx.send(PrivacyStatus::Stopped).await;
 

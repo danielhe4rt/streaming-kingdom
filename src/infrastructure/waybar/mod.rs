@@ -15,9 +15,8 @@ use crate::domain::StreamEvent;
 // ---------------------------------------------------------------------------
 
 fn cache_dir() -> io::Result<PathBuf> {
-    let base = dirs::cache_dir().ok_or_else(|| {
-        io::Error::new(io::ErrorKind::NotFound, "no cache directory available")
-    })?;
+    let base = dirs::cache_dir()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no cache directory available"))?;
     Ok(base.join("streams-toolkit"))
 }
 
@@ -30,9 +29,8 @@ fn data_file_path() -> io::Result<PathBuf> {
 // ---------------------------------------------------------------------------
 
 fn scripts_dir() -> io::Result<PathBuf> {
-    let config = dirs::config_dir().ok_or_else(|| {
-        io::Error::new(io::ErrorKind::NotFound, "no config directory available")
-    })?;
+    let config = dirs::config_dir()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no config directory available"))?;
     Ok(config.join("streams-toolkit").join("scripts"))
 }
 
@@ -58,7 +56,10 @@ pub fn ensure_scripts() -> io::Result<()> {
             perms.set_mode(0o755);
             fs::set_permissions(&script_path, perms)?;
         }
-        tracing::info!("installed stream_events.py script to {}", script_path.display());
+        tracing::info!(
+            "installed stream_events.py script to {}",
+            script_path.display()
+        );
     }
     Ok(())
 }

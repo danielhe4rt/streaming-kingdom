@@ -93,10 +93,10 @@ impl ObsConfig {
         if let Ok(v) = env::var("OBS_HOST") {
             self.host = v;
         }
-        if let Ok(v) = env::var("OBS_PORT") {
-            if let Ok(port) = v.parse::<u16>() {
-                self.port = port;
-            }
+        if let Ok(v) = env::var("OBS_PORT")
+            && let Ok(port) = v.parse::<u16>()
+        {
+            self.port = port;
         }
         if let Ok(v) = env::var("OBS_PASSWORD") {
             self.password = v;
@@ -110,20 +110,20 @@ impl ObsConfig {
 impl LivepixConfig {
     /// Override empty fields with environment variables from .env.
     pub fn apply_env_overrides(&mut self) {
-        if self.client_id.is_empty() {
-            if let Ok(val) = env::var("LIVEPIX_CLIENT_ID") {
-                self.client_id = val;
-            }
+        if self.client_id.is_empty()
+            && let Ok(val) = env::var("LIVEPIX_CLIENT_ID")
+        {
+            self.client_id = val;
         }
-        if self.client_secret.is_empty() {
-            if let Ok(val) = env::var("LIVEPIX_CLIENT_SECRET") {
-                self.client_secret = val;
-            }
+        if self.client_secret.is_empty()
+            && let Ok(val) = env::var("LIVEPIX_CLIENT_SECRET")
+        {
+            self.client_secret = val;
         }
-        if self.tts.elevenlabs_api_key.is_empty() {
-            if let Ok(val) = env::var("ELEVENLABS_API_KEY") {
-                self.tts.elevenlabs_api_key = val;
-            }
+        if self.tts.elevenlabs_api_key.is_empty()
+            && let Ok(val) = env::var("ELEVENLABS_API_KEY")
+        {
+            self.tts.elevenlabs_api_key = val;
         }
     }
 }

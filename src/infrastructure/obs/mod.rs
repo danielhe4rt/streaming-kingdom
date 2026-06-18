@@ -4,11 +4,7 @@ const FILTER_KIND: &str = "obs_composite_blur";
 /// Try to connect to OBS. Returns `None` (with a logged warning) when OBS
 /// isn't running or the connection is refused – this is expected during normal
 /// desktop use.
-pub async fn try_connect_obs(
-    host: &str,
-    port: u16,
-    password: &str,
-) -> Option<obws::Client> {
+pub async fn try_connect_obs(host: &str, port: u16, password: &str) -> Option<obws::Client> {
     let pw: Option<&str> = if password.is_empty() {
         None
     } else {
@@ -32,11 +28,12 @@ pub async fn enable_blur(client: &obws::Client, capture_source: &str) {
     match client.filters().get(source, FILTER_NAME).await {
         Ok(existing) => {
             if !existing.enabled {
-                let req: obws::requests::filters::SetEnabled<'_> = obws::requests::filters::SetEnabled {
-                    source,
-                    filter: FILTER_NAME,
-                    enabled: true,
-                };
+                let req: obws::requests::filters::SetEnabled<'_> =
+                    obws::requests::filters::SetEnabled {
+                        source,
+                        filter: FILTER_NAME,
+                        enabled: true,
+                    };
                 if let Err(e) = client.filters().set_enabled(req).await {
                     tracing::error!("failed to enable blur filter: {e}");
                 }

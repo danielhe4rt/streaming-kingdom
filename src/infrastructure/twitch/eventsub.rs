@@ -109,9 +109,7 @@ impl TwitchClient {
                     tracing::info!("reconnecting to server-provided URL");
                     let _ = self
                         .app_event_tx
-                        .send(AppEvent::Info(
-                            "Twitch: server-initiated reconnect".into(),
-                        ))
+                        .send(AppEvent::Info("Twitch: server-initiated reconnect".into()))
                         .await;
                     connect_url = url;
                     delay = INITIAL_RECONNECT_DELAY;
@@ -164,11 +162,11 @@ impl TwitchClient {
         // Only subscribe on fresh connections (not server-initiated reconnects
         // which already preserve subscriptions). We can tell because server
         // reconnects provide a non-default URL.
-        if url == EVENTSUB_URL {
-            if let Err(e) = self.subscribe_events(&session_id).await {
-                tracing::error!("failed to subscribe to events: {e}");
-                return Err(e);
-            }
+        if url == EVENTSUB_URL
+            && let Err(e) = self.subscribe_events(&session_id).await
+        {
+            tracing::error!("failed to subscribe to events: {e}");
+            return Err(e);
         }
 
         // Step 3: Listen for messages until disconnect or reconnect.
@@ -213,9 +211,7 @@ impl TwitchClient {
                     tracing::info!("server closed connection");
                     let _ = self
                         .app_event_tx
-                        .send(AppEvent::Info(
-                            "Twitch: server closed connection".into(),
-                        ))
+                        .send(AppEvent::Info("Twitch: server closed connection".into()))
                         .await;
                     return Ok(ReconnectAction::Disconnected);
                 }
@@ -437,9 +433,7 @@ impl TwitchClient {
                 if let Some(stream_event) = parse_event(sub_type, event) {
                     let _ = self
                         .app_event_tx
-                        .try_send(AppEvent::Info(format!(
-                            "Twitch: received {sub_type} event"
-                        )));
+                        .try_send(AppEvent::Info(format!("Twitch: received {sub_type} event")));
                     let _ = self.event_tx.send(stream_event);
                 }
             }
@@ -459,11 +453,9 @@ impl TwitchClient {
                     .as_str()
                     .unwrap_or("unknown");
                 tracing::warn!(sub_type, reason, "subscription revoked");
-                let _ = self
-                    .app_event_tx
-                    .try_send(AppEvent::Error(format!(
-                        "Twitch: {sub_type} subscription revoked ({reason})"
-                    )));
+                let _ = self.app_event_tx.try_send(AppEvent::Error(format!(
+                    "Twitch: {sub_type} subscription revoked ({reason})"
+                )));
 
                 if reason == "authorization_revoked" {
                     return MessageResult::TokenRevoked;
@@ -580,9 +572,7 @@ async fn wait_for_welcome(
                 if msg["metadata"]["message_type"].as_str() == Some("session_welcome") {
                     let session_id = msg["payload"]["session"]["id"]
                         .as_str()
-                        .ok_or_else(|| {
-                            ClientError::Connect("no session_id in welcome".into())
-                        })?
+                        .ok_or_else(|| ClientError::Connect("no session_id in welcome".into()))?
                         .to_string();
                     return Ok(session_id);
                 }

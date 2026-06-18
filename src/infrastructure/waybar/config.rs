@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::{fs, io};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::{data_file_path, stream_events_script_path};
 

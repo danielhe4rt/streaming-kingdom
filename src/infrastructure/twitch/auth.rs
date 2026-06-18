@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
+use axum::Router;
 use axum::extract::{Query, State};
 use axum::response::Html;
 use axum::routing::get;
-use axum::Router;
 use serde::Deserialize;
 use serde_json::Value;
-use tokio::sync::{oneshot, Mutex};
+use tokio::sync::{Mutex, oneshot};
 
 const AUTH_URL: &str = "https://id.twitch.tv/oauth2/authorize";
 const TOKEN_URL: &str = "https://id.twitch.tv/oauth2/token";
@@ -71,10 +71,7 @@ pub async fn validate_token(token: &str) -> bool {
 /// 2. Opens the Twitch authorization URL in the user's browser
 /// 3. Waits for the callback with the authorization code
 /// 4. Exchanges the code for access + refresh tokens
-pub async fn authenticate(
-    client_id: &str,
-    client_secret: &str,
-) -> Result<TokenResponse, String> {
+pub async fn authenticate(client_id: &str, client_secret: &str) -> Result<TokenResponse, String> {
     let redirect_uri = format!("http://localhost:{REDIRECT_PORT}");
     let scope = SCOPES.join("+");
 
@@ -181,9 +178,7 @@ async fn callback_handler(
 ) -> Html<&'static str> {
     if let Some(sender) = state.tx.lock().await.take() {
         if let Some(error) = params.error {
-            let desc = params
-                .error_description
-                .unwrap_or_else(|| error.clone());
+            let desc = params.error_description.unwrap_or_else(|| error.clone());
             let _ = sender.send(Err(desc));
             return Html(
                 "<html><body style=\"font-family:sans-serif;text-align:center;padding:60px\">\

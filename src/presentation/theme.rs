@@ -1,7 +1,7 @@
 use ratatui::prelude::*;
 
-use crate::domain::StreamEvent;
 use super::state::HighlightEntry;
+use crate::domain::StreamEvent;
 
 // ---------------------------------------------------------------------------
 // Highlight colors (Material Palenight) — used by mod.rs for maybe_highlight
@@ -40,24 +40,42 @@ pub fn maybe_highlight(event: &StreamEvent) -> Option<HighlightEntry> {
             text: format!("{username} followed"),
             color: COLOR_FOLLOW,
         }),
-        StreamEvent::Sub { username, tier, months } => Some(HighlightEntry {
+        StreamEvent::Sub {
+            username,
+            tier,
+            months,
+        } => Some(HighlightEntry {
             icon: "★",
             text: format!("{username} subbed ({tier:?}, {months}mo)"),
             color: COLOR_SUB,
         }),
-        StreamEvent::GiftSub { username, tier, total } => Some(HighlightEntry {
+        StreamEvent::GiftSub {
+            username,
+            tier,
+            total,
+        } => Some(HighlightEntry {
             icon: "🎁",
             text: format!("{username} gifted {total} subs ({tier:?})"),
             color: COLOR_GIFTSUB,
         }),
-        StreamEvent::Raid { from_channel, viewers } => Some(HighlightEntry {
+        StreamEvent::Raid {
+            from_channel,
+            viewers,
+        } => Some(HighlightEntry {
             icon: "⚡",
             text: format!("{from_channel} raided with {viewers}"),
             color: COLOR_RAID,
         }),
-        StreamEvent::Donation { username, amount_cents, message } => Some(HighlightEntry {
+        StreamEvent::Donation {
+            username,
+            amount_cents,
+            message,
+        } => Some(HighlightEntry {
             icon: "$",
-            text: format!("{username} donated ${:.2}: {message}", *amount_cents as f64 / 100.0),
+            text: format!(
+                "{username} donated ${:.2}: {message}",
+                *amount_cents as f64 / 100.0
+            ),
             color: COLOR_DONATION,
         }),
         _ => None,

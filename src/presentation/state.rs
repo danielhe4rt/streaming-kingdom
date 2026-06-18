@@ -144,7 +144,11 @@ pub struct TuiState {
 }
 
 impl TuiState {
-    pub fn new(event_log_config: &EventLogConfig, twitch_channel: &str, tts_available: bool) -> Self {
+    pub fn new(
+        event_log_config: &EventLogConfig,
+        twitch_channel: &str,
+        tts_available: bool,
+    ) -> Self {
         Self {
             focused_pane: Pane::Integrations,
             integration_cursor: 0,

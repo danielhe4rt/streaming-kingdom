@@ -34,7 +34,10 @@ pub async fn tts_worker(mut rx: mpsc::Receiver<TtsRequest>, config: TtsConfig) {
     };
 
     if let Err(e) = std::fs::create_dir_all(&cache_dir) {
-        tracing::error!("failed to create TTS cache dir {}: {e}", cache_dir.display());
+        tracing::error!(
+            "failed to create TTS cache dir {}: {e}",
+            cache_dir.display()
+        );
         return;
     }
 
@@ -115,19 +118,16 @@ async fn process_request(
 
 async fn play_audio(path: &Path) {
     // Try mpv first
-    match Command::new("mpv")
+    if let Ok(mut child) = Command::new("mpv")
         .arg("--no-video")
         .arg("--really-quiet")
         .arg(path)
         .spawn()
     {
-        Ok(mut child) => {
-            if let Err(e) = child.wait().await {
-                tracing::warn!("mpv exited with error: {e}");
-            }
-            return;
+        if let Err(e) = child.wait().await {
+            tracing::warn!("mpv exited with error: {e}");
         }
-        Err(_) => {}
+        return;
     }
 
     // Fallback to ffplay

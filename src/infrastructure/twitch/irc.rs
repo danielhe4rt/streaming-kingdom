@@ -18,11 +18,7 @@ pub struct ChatClient {
 }
 
 impl ChatClient {
-    pub fn new(
-        channel: String,
-        login_name: Option<String>,
-        oauth_token: Option<String>,
-    ) -> Self {
+    pub fn new(channel: String, login_name: Option<String>, oauth_token: Option<String>) -> Self {
         Self {
             channel,
             oauth_token,
@@ -30,11 +26,7 @@ impl ChatClient {
         }
     }
 
-    pub async fn run(
-        self,
-        tx: mpsc::Sender<ChatMessage>,
-        event_tx: mpsc::Sender<AppEvent>,
-    ) {
+    pub async fn run(self, tx: mpsc::Sender<ChatMessage>, event_tx: mpsc::Sender<AppEvent>) {
         let mut delay = INITIAL_RECONNECT_DELAY;
 
         loop {

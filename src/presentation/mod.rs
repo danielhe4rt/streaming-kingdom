@@ -7,8 +7,8 @@ use std::io::{self, Stdout};
 use std::time::Duration;
 
 use crossterm::event::{self, Event};
-use ratatui::prelude::*;
 use ratatui::Terminal;
+use ratatui::prelude::*;
 use tokio::sync::{broadcast, mpsc};
 
 use crate::application::{AppState, EventLogConfig};
@@ -33,7 +33,10 @@ fn init_terminal() -> io::Result<Terminal<CrosstermBackend<Stdout>>> {
 
 fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> io::Result<()> {
     crossterm::terminal::disable_raw_mode()?;
-    crossterm::execute!(terminal.backend_mut(), crossterm::terminal::LeaveAlternateScreen)?;
+    crossterm::execute!(
+        terminal.backend_mut(),
+        crossterm::terminal::LeaveAlternateScreen
+    )?;
     terminal.show_cursor()?;
     Ok(())
 }
@@ -64,12 +67,12 @@ pub async fn run(
     let cmd_tx = app.command_sender();
 
     // Enable the stream bar if waybar starts enabled
-    if app.waybar_enabled {
-        if let Err(e) = waybar::enable(waybar_output).await {
-            app.status_message = Some(waybar_error_message(&e));
-            app.waybar_enabled = false;
-            tracing::warn!("failed to enable waybar stream bar: {e}");
-        }
+    if app.waybar_enabled
+        && let Err(e) = waybar::enable(waybar_output).await
+    {
+        app.status_message = Some(waybar_error_message(&e));
+        app.waybar_enabled = false;
+        tracing::warn!("failed to enable waybar stream bar: {e}");
     }
 
     let mut privacy_status_rx = privacy_status_rx;
@@ -99,10 +102,10 @@ pub async fn run(
     let _ = livepix_cmd_tx.send(LivepixCommand::Stop).await;
 
     // Clean up stream bar from waybar config on exit
-    if app.waybar_enabled {
-        if let Err(e) = waybar::disable().await {
-            tracing::warn!("failed to disable waybar stream bar on exit: {e}");
-        }
+    if app.waybar_enabled
+        && let Err(e) = waybar::disable().await
+    {
+        tracing::warn!("failed to disable waybar stream bar on exit: {e}");
     }
 
     restore_terminal(&mut terminal)?;
@@ -134,12 +137,11 @@ async fn event_loop(
 
         // Poll for crossterm events with a short timeout so we can also
         // drain stream events from the broadcast channel.
-        if event::poll(TICK)? {
-            if let Event::Key(key) = event::read()? {
-                if input::handle_key(key, app, tui, cmd_tx).await {
-                    return Ok(());
-                }
-            }
+        if event::poll(TICK)?
+            && let Event::Key(key) = event::read()?
+            && input::handle_key(key, app, tui, cmd_tx).await
+        {
+            return Ok(());
         }
 
         // Drain any pending stream events into stats / event log / highlights.
@@ -260,7 +262,9 @@ async fn event_loop(
             match &ev {
                 AppEvent::Info(msg) => {
                     let lower = msg.to_lowercase();
-                    if lower.contains("connected to eventsub") || lower.contains("eventsub connecting") {
+                    if lower.contains("connected to eventsub")
+                        || lower.contains("eventsub connecting")
+                    {
                         tui.twitch_eventsub.connected = true;
                     }
                     if lower.contains("session established") || lower.contains("welcome") {
@@ -277,7 +281,9 @@ async fn event_loop(
                 AppEvent::Error(msg) => {
                     let lower = msg.to_lowercase();
                     // Chat disconnect
-                    if lower.contains("twitch chat disconnected") || lower.contains("twitch chat failed") {
+                    if lower.contains("twitch chat disconnected")
+                        || lower.contains("twitch chat failed")
+                    {
                         tui.twitch_chat.connected = false;
                     }
                     // EventSub disconnect
