@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>streams-toolkit · TUI layout prototype</title>
+<!--
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  PROTOTYPE — THROWAWAY. Not production. Delete or fold the winner in.      │
+  │                                                                           │
+  │  QUESTION: what should the refactored control-panel UI look like once it  │
+  │  has to host the NEW Overlays control alongside the existing services,    │
+  │  stats, chat and event log — organized so it's scalable & robust          │
+  │  (adding a service/overlay = adding a data entry, no fixed 4-pane grid,   │
+  │  no magic-number cursor mapping)?                                          │
+  │                                                                           │
+  │  3 variants, switchable via ?variant=A|B|C + floating bottom bar + ←/→.   │
+  │   A — Sidebar Nav        (navigate to one section at a time)              │
+  │   B — Dense Dashboard    (everything visible at once, regrouped)          │
+  │   C — Master / Detail    (module list + inspector, chat always pinned)    │
+  │                                                                           │
+  │  Everything renders from one `state` object via small "component"         │
+  │  builders — that IS the scalability claim, made visible.                  │
+  └─────────────────────────────────────────────────────────────────────────┘
+-->
+<style>
+  :root{
+    --bg:#0c0a12; --bg2:#13101d; --bg3:#191427; --line:#2a2440;
+    --line2:#3a3358; --txt:#cfc9e6; --dim:#7d7699; --dim2:#534d6b;
+    --accent:#a855f7; --accent2:#7c3aed; --accentdim:#4c2f7a;
+    --green:#34d399; --yellow:#fbbf24; --red:#f87171; --cyan:#38bdf8;
+    --follow:#ff6ec7; --sub:#34d399; --donation:#fbbf24; --raid:#a855f7;
+    --cheer:#38bdf8; --gift:#f472b6;
+    --pill:#fff;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--txt);
+    font:13px/1.5 'JetBrains Mono','SF Mono',ui-monospace,Menlo,Consolas,monospace;
+    overflow:hidden;
+  }
+  #stage{height:100vh; padding-bottom:46px; /* room for switcher */}
+
+  /* ---- generic terminal chrome ---- */
+  .app{display:flex;flex-direction:column;height:100%}
+  .topbar{
+    display:flex;align-items:center;gap:14px;padding:8px 14px;
+    border-bottom:1px solid var(--line);background:linear-gradient(90deg,#1a1330,#120e1f);
+    flex:0 0 auto;
+  }
+  .brand{display:flex;align-items:center;gap:8px;font-weight:700;color:#fff;letter-spacing:.5px}
+  .brand .logo{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,#a855f7,#6d28d9);
+    display:grid;place-items:center;color:#fff;font-size:12px}
+  .topbar .spacer{flex:1}
+  .chip{display:inline-flex;align-items:center;gap:6px;padding:2px 9px;border:1px solid var(--line2);
+    border-radius:999px;font-size:11px;color:var(--dim)}
+  .chip.on{color:var(--green);border-color:#1f5641}
+  .clock{color:var(--dim);font-size:11px}
+
+  .statusbar{
+    flex:0 0 auto;display:flex;gap:18px;align-items:center;padding:5px 14px;
+    border-top:1px solid var(--line);background:#0a0810;color:var(--dim);font-size:11px;
+  }
+  .statusbar kbd{background:#221b35;border:1px solid var(--line2);border-bottom-width:2px;
+    border-radius:4px;padding:0 5px;color:var(--txt);font-size:10px;margin-right:3px}
+
+  /* ---- panel ---- */
+  .panel{border:1px solid var(--line);border-radius:8px;background:var(--bg2);min-height:0;display:flex;flex-direction:column}
+  .panel.focus{border-color:var(--accent);box-shadow:0 0 0 1px var(--accentdim) inset}
+  .panel > .head{display:flex;align-items:center;gap:8px;padding:6px 11px;border-bottom:1px solid var(--line);
+    color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:1px;flex:0 0 auto}
+  .panel > .head .count{margin-left:auto;color:var(--dim2);text-transform:none;letter-spacing:0}
+  .panel > .body{padding:8px 10px;overflow:auto;min-height:0;flex:1}
+  .panel > .body.tight{padding:4px}
+
+  /* ---- status dot ---- */
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+  .dot.green{background:var(--green);box-shadow:0 0 7px #34d39988}
+  .dot.yellow{background:var(--yellow);box-shadow:0 0 7px #fbbf2488}
+  .dot.red{background:var(--red)}
+  .dot.gray{background:transparent;border:1.5px solid var(--dim2)}
+
+  /* ---- service / module row ---- */
+  .row{display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:7px;cursor:pointer;
+    border:1px solid transparent}
+  .row:hover{background:var(--bg3)}
+  .row.sel{background:var(--bg3);border-color:var(--line2)}
+  .row .meta{min-width:0;flex:1}
+  .row .name{color:var(--txt);font-weight:600;display:flex;align-items:center;gap:7px}
+  .row .sub{color:var(--dim);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tag{font-size:9px;padding:1px 6px;border-radius:4px;border:1px solid var(--line2);color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+  .tag.in{color:var(--cyan);border-color:#1d4a63}
+  .tag.out{color:var(--accent);border-color:var(--accentdim)}
+  .toggle{font-size:11px;color:var(--dim);border:1px solid var(--line2);border-radius:5px;padding:1px 7px}
+  .toggle.on{color:var(--green);border-color:#1f5641;background:#0e2b20}
+  .group-label{font-size:10px;color:var(--dim2);text-transform:uppercase;letter-spacing:1.5px;
+    padding:9px 9px 3px}
+
+  /* ---- KPIs ---- */
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .kpi{border:1px solid var(--line);border-radius:8px;padding:9px 12px;background:var(--bg2)}
+  .kpi .k{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1px}
+  .kpi .v{font-size:22px;font-weight:700;color:#fff;margin-top:2px}
+  .kpi .v small{font-size:12px;color:var(--dim);font-weight:400}
+  .kpi.viewers .v{color:var(--cyan)} .kpi.followers .v{color:var(--follow)}
+  .kpi.subs .v{color:var(--green)} .kpi.uptime .v{color:var(--txt)}
+
+  /* ---- chat ---- */
+  .chat-line{padding:4px 2px;border-bottom:1px solid #ffffff08}
+  .chat-line .badges{display:inline-flex;gap:3px;margin-right:5px;vertical-align:middle}
+  .badge{font-size:8px;padding:0 4px;border-radius:3px;background:#2a2440;color:#cbb8f0;border:1px solid var(--line2)}
+  .badge.mod{background:#0e2b20;color:#34d399;border-color:#1f5641}
+  .badge.vip{background:#3a0f2a;color:#f472b6;border-color:#7a2257}
+  .badge.sub{background:#2a1d3a;color:#c084fc;border-color:#5b3a8a}
+  .cu{font-weight:700} .ct{color:var(--txt)}
+  .emote{display:inline-block;padding:0 4px;border-radius:4px;background:#241b38;color:#d8b4fe;font-size:11px}
+
+  /* ---- highlights & events ---- */
+  .hl{display:flex;gap:8px;padding:4px 2px;align-items:baseline}
+  .hl .i{width:14px;text-align:center}
+  .ev{display:flex;gap:9px;padding:3px 2px;font-size:12px;align-items:baseline}
+  .ev .ts{color:var(--dim2);font-size:11px}
+  .ev .i{width:16px;text-align:center}
+  .filters{display:flex;gap:5px;flex-wrap:wrap}
+  .fchip{font-size:10px;padding:1px 8px;border-radius:999px;border:1px solid var(--line2);color:var(--dim2);cursor:pointer}
+  .fchip.on{color:#fff;border-color:var(--accentdim);background:#241640}
+
+  /* ---- overlays panel ---- */
+  .ovserver{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--line);
+    border-radius:8px;background:linear-gradient(90deg,#1a1330,#140f24);margin-bottom:9px}
+  .ovserver .url{margin-left:auto;color:var(--cyan);font-size:11px}
+  .ovcard{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);
+    border-radius:8px;background:var(--bg2);margin-bottom:7px}
+  .ovcard .name{font-weight:600}
+  .ovcard .src{color:var(--cyan);font-size:11px}
+  .ovcard .clients{color:var(--dim);font-size:11px;margin-left:auto}
+  .copy{font-size:10px;border:1px solid var(--line2);border-radius:5px;padding:1px 7px;color:var(--dim);cursor:pointer}
+  .copy:hover{color:var(--txt);border-color:var(--accent)}
+
+  .note{color:var(--dim2);font-size:11px;font-style:italic;padding:6px 2px}
+
+  /* =========================================================================
+     VARIANT A — sidebar nav
+     ========================================================================= */
+  .vA{display:grid;grid-template-columns:200px 1fr;gap:10px;height:100%;padding:10px}
+  .vA .side{display:flex;flex-direction:column;gap:3px}
+  .vA .navitem{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:8px;cursor:pointer;color:var(--dim)}
+  .vA .navitem:hover{background:var(--bg2);color:var(--txt)}
+  .vA .navitem.sel{background:linear-gradient(90deg,#241640,#1a1330);color:#fff;border:1px solid var(--accentdim)}
+  .vA .navitem .ic{width:18px;text-align:center}
+  .vA .navitem .badge-n{margin-left:auto;font-size:10px;color:var(--dim2)}
+  .vA .content{min-height:0;display:flex;flex-direction:column;gap:10px}
+
+  /* =========================================================================
+     VARIANT B — dense dashboard
+     ========================================================================= */
+  .vB{display:grid;grid-template-rows:auto 1fr auto;gap:10px;height:100%;padding:10px}
+  .vB .cols{display:grid;grid-template-columns:1.1fr 1.2fr 1fr;gap:10px;min-height:0}
+  .vB .stack{display:grid;grid-template-rows:1fr 1fr;gap:10px;min-height:0}
+
+  /* =========================================================================
+     VARIANT C — master / detail
+     ========================================================================= */
+  .vC{display:grid;grid-template-columns:230px 1fr 300px;grid-template-rows:1fr auto;gap:10px;height:100%;padding:10px}
+  .vC .master{grid-row:1 / 2}
+  .vC .detail{grid-row:1 / 2;min-height:0}
+  .vC .chatcol{grid-row:1 / 2;min-height:0}
+  .vC .logstrip{grid-column:1 / -1;grid-row:2 / 3;max-height:150px}
+  .detail .dhead{padding:11px 13px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+  .detail .dhead .title{font-size:15px;font-weight:700;color:#fff}
+  .detail .dbody{padding:13px;overflow:auto}
+  .kv{display:grid;grid-template-columns:120px 1fr;gap:6px 12px;margin:8px 0}
+  .kv .k{color:var(--dim)} .kv .v{color:var(--txt)}
+
+  /* =========================================================================
+     VARIANT D — Topbar (primary nav) > Sidebar (sub-nav) > Content
+     ========================================================================= */
+  .topnav{display:flex;gap:3px;margin-left:8px}
+  .topnav .t{padding:6px 14px;border-radius:7px;color:var(--dim);cursor:pointer;font-size:12px;border:1px solid transparent}
+  .topnav .t:hover{background:var(--bg2);color:var(--txt)}
+  .topnav .t.sel{background:linear-gradient(90deg,#241640,#1a1330);color:#fff;border-color:var(--accentdim)}
+  .topnav .t .n{font-size:10px;color:var(--dim2);margin-left:6px}
+  .vD{display:grid;grid-template-columns:210px 1fr;gap:10px;height:100%;padding:10px}
+  .vD .crumb{font-size:10px;color:var(--dim2);text-transform:uppercase;letter-spacing:1.5px;padding:2px 4px 8px}
+  .vD .content{min-height:0;display:flex;flex-direction:column;gap:10px}
+
+  /* ---- floating switcher ---- */
+  #switch{position:fixed;left:50%;bottom:10px;transform:translateX(-50%);z-index:99;
+    display:flex;align-items:center;gap:4px;background:#000;border:1px solid var(--accent);
+    border-radius:999px;padding:4px 6px;box-shadow:0 8px 30px #000a, 0 0 0 4px #a855f720}
+  #switch button{background:#1a1330;color:#fff;border:1px solid var(--line2);border-radius:999px;
+    width:30px;height:30px;cursor:pointer;font-size:15px}
+  #switch button:hover{border-color:var(--accent);background:#241640}
+  #switch .lbl{padding:0 12px;font-size:12px;color:#fff;font-weight:600;min-width:185px;text-align:center}
+  #switch .lbl small{color:var(--accent);font-weight:400}
+</style>
+</head>
+<body>
+  <div id="stage"></div>
+
+  <div id="switch">
+    <button id="prev" title="← prev">‹</button>
+    <div class="lbl" id="lbl"></div>
+    <button id="next" title="→ next">›</button>
+  </div>
+
+<script>
+/* ===========================================================================
+   ONE data model. Every variant renders from this. Adding a service or an
+   overlay = pushing an object here. No layout knows a fixed count.
+   =========================================================================== */
+const state = {
+  channel: 'danielhe4rt',
+  overlayServer: { running:true, port:8420, sseClients:2 },
+  // INPUTS = things that feed the toolkit. OUTPUTS = things the toolkit drives.
+  services: [
+    { id:'eventsub', name:'Twitch EventSub', kind:'in',  toggleable:false, dot:'green',  status:'Session established', detail:'6 subs registered' },
+    { id:'chat',     name:'Twitch Chat',     kind:'in',  toggleable:false, dot:'green',  status:'Connected',           detail:'#danielhe4rt · 1.2k msgs' },
+    { id:'livepix',  name:'Livepix',         kind:'in',  toggleable:true,  enabled:true,  dot:'green', status:'Listening :9000', detail:'OAuth ✓ · TTS ✓' },
+    { id:'hyprland', name:'Hyprland',        kind:'in',  toggleable:true,  enabled:true,  dot:'green', status:'Listening',       detail:'342 events' },
+    { id:'waybar',   name:'Waybar Bar',      kind:'out', toggleable:true,  enabled:true,  dot:'green', status:'Active',          detail:'omarchy bar' },
+    { id:'overlays', name:'Overlays (HTTP)', kind:'out', toggleable:true,  enabled:true,  dot:'green', status:'Serving :8420',   detail:'2 SSE clients' },
+  ],
+  overlays: [
+    { id:'chat',  name:'Chat',  url:'/overlay/chat',  enabled:true,  clients:1 },
+    { id:'frame', name:'Frame', url:'/overlay/frame', enabled:true,  clients:1 },
+  ],
+  stats: { viewers:128, followers:12, subs:4, uptime:'02:14:33' },
+  highlights: [
+    { i:'★', c:'sub',      t:'fulano subbed · Tier1 · 3mo' },
+    { i:'$', c:'donation', t:'ciclano donated R$5,00 · "vai dale!"' },
+    { i:'⚡', c:'raid',     t:'canalx raided · 23 viewers' },
+    { i:'♥', c:'follow',   t:'beltrano followed' },
+  ],
+  chat: [
+    { u:'danielhe4rt', color:'#5B99FF', badges:['mod','sub'], parts:[{t:'eae galera '},{e:'PogChamp'}] },
+    { u:'viewer_one',  color:'#ff6ec7', badges:[],            parts:[{t:'primeira vez aqui, curtindo!'}] },
+    { u:'modzao',      color:'#34d399', badges:['mod'],       parts:[{t:'bem vindo '},{e:'Kappa'}] },
+    { u:'subdoido',    color:'#c084fc', badges:['sub','vip'], parts:[{t:'esse overlay ta limpo demais'}] },
+    { u:'randomguy',   color:'#fbbf24', badges:[],            parts:[{t:'das'}] },
+  ],
+  events: [
+    { ts:'02:14:31', i:'💬', g:'chat',    t:'danielhe4rt: eae galera' },
+    { ts:'02:14:18', i:'★',  g:'stream',  t:'fulano subbed (Tier1, 3mo)' },
+    { ts:'02:13:55', i:'🔒', g:'privacy', t:'Blur ON: 1Password' },
+    { ts:'02:13:40', i:'$',  g:'stream',  t:'ciclano donated R$5,00' },
+    { ts:'02:13:22', i:'ℹ',  g:'system',  t:'Overlays serving on :8420' },
+    { ts:'02:13:05', i:'⊞',  g:'hyprland',t:'Workspace: 2' },
+    { ts:'02:12:48', i:'ℹ',  g:'livepix', t:'Webhook listening on :9000' },
+  ],
+  filterGroups: ['stream','privacy','system','hyprland','livepix','chat'],
+};
+
+/* ---------- tiny component builders (shared, layout-agnostic) ---------- */
+const el = (h)=>{const d=document.createElement('div');d.innerHTML=h.trim();return d.firstElementChild;};
+
+function dot(k){return `<span class="dot ${k}"></span>`;}
+
+function serviceRow(s,{selectable=false,selId=null}={}){
+  const tog = s.toggleable ? `<span class="toggle ${s.enabled?'on':''}">${s.enabled?'ON':'OFF'}</span>` : '';
+  const tag = `<span class="tag ${s.kind==='in'?'in':'out'}">${s.kind}</span>`;
+  return `<div class="row ${selId===s.id?'sel':''}" data-svc="${s.id}">
+    ${dot(s.dot)}
+    <div class="meta">
+      <div class="name">${s.name} ${tag}</div>
+      <div class="sub">${s.status} · ${s.detail||''}</div>
+    </div>${tog}</div>`;
+}
+
+function servicesGrouped(opts={}){
+  const ins = state.services.filter(s=>s.kind==='in');
+  const outs= state.services.filter(s=>s.kind==='out');
+  return `<div class="group-label">Inputs</div>${ins.map(s=>serviceRow(s,opts)).join('')}
+          <div class="group-label">Outputs</div>${outs.map(s=>serviceRow(s,opts)).join('')}`;
+}
+
+function kpis(){
+  const s=state.stats;
+  return `<div class="kpis">
+    <div class="kpi viewers"><div class="k">Viewers</div><div class="v">${s.viewers}</div></div>
+    <div class="kpi followers"><div class="k">Followers today</div><div class="v">${s.followers}</div></div>
+    <div class="kpi subs"><div class="k">Subs today</div><div class="v">${s.subs}</div></div>
+    <div class="kpi uptime"><div class="k">Uptime</div><div class="v">${s.uptime}</div></div>
+  </div>`;
+}
+
+function chatLine(m){
+  const badges = m.badges.map(b=>`<span class="badge ${b}">${b}</span>`).join('');
+  const body = m.parts.map(p=>p.e?`<span class="emote">${p.e}</span>`:`<span class="ct">${p.t}</span>`).join('');
+  return `<div class="chat-line"><span class="badges">${badges}</span><span class="cu" style="color:${m.color}">${m.u}</span><span class="ct">: </span>${body}</div>`;
+}
+function chatBody(){return state.chat.map(chatLine).join('');}
+
+function highlightsBody(){
+  return state.highlights.map(h=>`<div class="hl"><span class="i" style="color:var(--${h.c})">${h.i}</span><span>${h.t}</span></div>`).join('');
+}
+
+function filtersBar(){
+  return `<div class="filters">${state.filterGroups.map((g,i)=>`<span class="fchip ${i<5?'on':''}">${g}</span>`).join('')}</div>`;
+}
+function eventsBody(){
+  return state.events.map(e=>`<div class="ev"><span class="ts">${e.ts}</span><span class="i">${e.i}</span><span>${e.t}</span></div>`).join('');
+}
+
+function overlaysPanel(){
+  const sv=state.overlayServer;
+  const server=`<div class="ovserver">${dot(sv.running?'green':'gray')}
+    <b style="color:#fff">Overlay server</b>
+    <span class="toggle ${sv.running?'on':''}">${sv.running?'RUNNING':'STOPPED'}</span>
+    <span class="url">http://127.0.0.1:${sv.port}</span></div>`;
+  const cards=state.overlays.map(o=>`<div class="ovcard">${dot(o.enabled?'green':'gray')}
+    <div><div class="name">${o.name}</div><div class="src">http://127.0.0.1:${sv.port}${o.url}</div></div>
+    <span class="clients">${o.clients} client${o.clients!==1?'s':''}</span>
+    <span class="copy">copy</span></div>`).join('');
+  return server+cards+`<div class="note">+ adicionar overlay = empurra 1 entrada em state.overlays. Cada uma é uma browser source no OBS, consumindo o mesmo feed SSE.</div>`;
+}
+
+/* shells reused across variants */
+function topbar(){
+  const sv=state.overlayServer;
+  return `<div class="topbar">
+    <div class="brand"><span class="logo">♥</span> streams-toolkit</div>
+    <span class="chip on">${dot('green')} #${state.channel}</span>
+    <span class="chip ${sv.running?'on':''}">overlays :${sv.port} · ${sv.sseClients} clients</span>
+    <span class="spacer"></span>
+    <span class="clock">live 02:14:33</span>
+  </div>`;
+}
+function statusbar(keys){
+  return `<div class="statusbar">${keys.map(k=>`<span><kbd>${k[0]}</kbd>${k[1]}</span>`).join('')}<span class="spacer" style="flex:1"></span><span>variant: ${current}</span></div>`;
+}
+function panel(title,bodyHtml,{focus=false,count='',tight=false}={}){
+  return `<div class="panel ${focus?'focus':''}">
+    <div class="head">${title}${count?`<span class="count">${count}</span>`:''}</div>
+    <div class="body ${tight?'tight':''}">${bodyHtml}</div></div>`;
+}
+
+/* =====================================================================
+   VARIANT A — Sidebar Nav (one section at a time)
+   ===================================================================== */
+let aSection = 'overlays';
+const A_SECTIONS = [
+  { id:'dashboard', ic:'▦', label:'Dashboard' },
+  { id:'services',  ic:'⚙', label:'Services',  n:()=>state.services.length },
+  { id:'overlays',  ic:'▣', label:'Overlays',  n:()=>state.overlays.length },
+  { id:'chat',      ic:'💬', label:'Chat',     n:()=>state.chat.length },
+  { id:'events',    ic:'≣', label:'Event Log', n:()=>state.events.length },
+];
+function renderA(){
+  const side = A_SECTIONS.map(s=>`<div class="navitem ${aSection===s.id?'sel':''}" data-sec="${s.id}">
+      <span class="ic">${s.ic}</span><span>${s.label}</span>${s.n?`<span class="badge-n">${s.n()}</span>`:''}</div>`).join('');
+
+  let content='';
+  if(aSection==='dashboard'){
+    content = `<div style="flex:0 0 auto">${kpis()}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;flex:1;min-height:0">
+        ${panel('Services', servicesGrouped(), {count:state.services.length})}
+        ${panel('Overlays', overlaysPanel(), {count:state.overlays.length})}
+      </div>`;
+  } else if(aSection==='services'){
+    content = panel('Services — Inputs & Outputs', servicesGrouped({selectable:true}), {focus:true, count:state.services.length});
+  } else if(aSection==='overlays'){
+    content = panel('Overlays', overlaysPanel(), {focus:true, count:state.overlays.length});
+  } else if(aSection==='chat'){
+    content = panel(`Chat #${state.channel}`, chatBody(), {focus:true, count:state.chat.length});
+  } else if(aSection==='events'){
+    content = panel('Event Log', filtersBar()+'<div style="height:6px"></div>'+eventsBody(), {focus:true, count:state.events.length});
+  }
+
+  return `<div class="app">${topbar()}
+    <div class="vA" style="flex:1;min-height:0">
+      <div class="side">${side}</div>
+      <div class="content">${content}</div>
+    </div>
+    ${statusbar([['↑↓','navegar seções'],['Enter','toggle'],['Tab','focus'],['q','sair']])}
+  </div>`;
+}
+
+/* =====================================================================
+   VARIANT B — Dense Dashboard (everything at once)
+   ===================================================================== */
+function renderB(){
+  return `<div class="app">${topbar()}
+    <div class="vB" style="flex:1;min-height:0">
+      <div style="flex:0 0 auto">${kpis()}</div>
+      <div class="cols">
+        ${panel('Services', servicesGrouped(), {count:state.services.length})}
+        ${panel(`Chat #${state.channel}`, chatBody(), {focus:true, count:'live'})}
+        <div class="stack">
+          ${panel('Overlays', overlaysPanel(), {count:state.overlays.length})}
+          ${panel('Highlights', highlightsBody(), {})}
+        </div>
+      </div>
+      ${panel('Event Log', `<div style="display:flex;gap:10px;align-items:flex-start"><div style="flex:0 0 auto">${filtersBar()}</div></div><div style="height:6px"></div>${eventsBody()}`, {count:state.events.length})}
+    </div>
+    ${statusbar([['Tab','mover foco'],['j/k','scroll'],['Space','toggle'],['1-6','filtros'],['q','sair']])}
+  </div>`;
+}
+
+/* =====================================================================
+   VARIANT C — Master / Detail (module list + inspector, chat pinned)
+   ===================================================================== */
+let cSel = 'overlays';
+function detailFor(id){
+  const s = state.services.find(x=>x.id===id);
+  if(!s) return '';
+  if(id==='overlays'){
+    return `<div class="detail panel focus" style="height:100%">
+      <div class="dhead">${dot(s.dot)}<span class="title">${s.name}</span>
+        <span class="toggle on" style="margin-left:auto">RUNNING</span></div>
+      <div class="dbody">
+        <div class="kv"><span class="k">Bind</span><span class="v">127.0.0.1:${state.overlayServer.port}</span>
+          <span class="k">SSE clients</span><span class="v">${state.overlayServer.sseClients} conectados ao /overlay/feed</span>
+          <span class="k">Feed</span><span class="v">chat enriquecido + stream events (compartilhado)</span></div>
+        <div class="group-label">Overlays servidas</div>
+        ${overlaysPanel()}
+      </div></div>`;
+  }
+  // generic service detail
+  return `<div class="detail panel focus" style="height:100%">
+    <div class="dhead">${dot(s.dot)}<span class="title">${s.name}</span>
+      <span class="tag ${s.kind==='in'?'in':'out'}" style="margin-left:auto">${s.kind==='in'?'input':'output'}</span></div>
+    <div class="dbody">
+      <div class="kv"><span class="k">Status</span><span class="v">${s.status}</span>
+        <span class="k">Detalhe</span><span class="v">${s.detail||'—'}</span>
+        <span class="k">Controle</span><span class="v">${s.toggleable?`<span class="toggle ${s.enabled?'on':''}">${s.enabled?'ON':'OFF'}</span> (Space para alternar)`:'read-only (monitor)'}</span></div>
+      ${id==='chat'?`<div class="group-label">Stream recente</div>${chatBody()}`:''}
+      <div class="note">Selecione um módulo à esquerda. Detalhe, controles e URLs aparecem aqui — espaço pra config por-overlay no futuro.</div>
+    </div></div>`;
+}
+function renderC(){
+  const master = `<div class="panel" style="height:100%">
+    <div class="head">Modules <span class="count">${state.services.length}</span></div>
+    <div class="body tight">${servicesGrouped({selectable:true, selId:cSel})}</div></div>`;
+  return `<div class="app">${topbar()}
+    <div class="vC" style="flex:1;min-height:0">
+      <div class="master">${master}</div>
+      <div class="detail">${detailFor(cSel)}</div>
+      <div class="chatcol">${panel(`Chat #${state.channel} (pinned)`, chatBody(), {count:'live'})}</div>
+      <div class="logstrip">${panel('Event Log', filtersBar()+'<div style="height:5px"></div>'+eventsBody(), {count:state.events.length})}</div>
+    </div>
+    ${statusbar([['↑↓','selecionar módulo'],['Space','toggle'],['Tab','focus'],['q','sair']])}
+  </div>`;
+}
+
+/* =====================================================================
+   VARIANT D — Topbar (primary) > Sidebar (sub-nav) > Content
+   Two-level navigation: topbar picks a section, sidebar picks a sub-item.
+   ===================================================================== */
+const D_TOP = [
+  { id:'dashboard', label:'Dashboard' },
+  { id:'services',  label:'Services',  n:()=>state.services.length },
+  { id:'overlays',  label:'Overlays',  n:()=>state.overlays.length },
+  { id:'activity',  label:'Activity' },
+];
+let dTop = 'overlays';
+const dSub = { dashboard:'overview', services:'__all', overlays:'__all', activity:'chat' };
+
+function subsFor(top){
+  if(top==='dashboard') return [{id:'overview', ic:'▦', label:'Overview'}];
+  if(top==='services')  return [{id:'__all', ic:'≣', label:'All services'},
+    ...state.services.map(s=>({id:s.id, ic:s.kind==='in'?'▸':'◂', label:s.name, tag:s.kind}))];
+  if(top==='overlays')  return [{id:'__all', ic:'▣', label:'All overlays'},
+    ...state.overlays.map(o=>({id:o.id, ic:'▢', label:o.name+' overlay'})),
+    {id:'feed', ic:'≈', label:'Feed (SSE)'}];
+  if(top==='activity')  return [{id:'chat', ic:'💬', label:'Live Chat'},
+    {id:'events', ic:'≣', label:'Event Log'}, {id:'highlights', ic:'★', label:'Highlights'}];
+  return [];
+}
+
+function overlayDetail(o){
+  const base = `http://127.0.0.1:${state.overlayServer.port}`;
+  return `<div class="panel focus" style="height:100%">
+    <div class="head">${o.name} overlay <span class="count">${o.clients} client${o.clients!==1?'s':''}</span></div>
+    <div class="body">
+      <div class="ovserver">${dot(o.enabled?'green':'gray')}<b style="color:#fff">${o.name}</b>
+        <span class="toggle ${o.enabled?'on':''}">${o.enabled?'ENABLED':'DISABLED'}</span>
+        <span class="url">${base}${o.url}</span><span class="copy">copy</span></div>
+      <div class="kv"><span class="k">Browser source</span><span class="v">${base}${o.url}</span>
+        <span class="k">Consome</span><span class="v">feed SSE compartilhado (chat + stream events)</span>
+        <span class="k">Componente</span><span class="v">overlays/src/components/${o.name}Overlay (headless + Tailwind)</span></div>
+      <div class="note">Config (fonte, cor, limite, hideAfter) viria por query param / config.toml e seria injetada aqui.</div>
+    </div></div>`;
+}
+
+function contentForD(top, sub){
+  if(top==='dashboard'){
+    return `<div style="flex:0 0 auto">${kpis()}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;flex:1;min-height:0">
+        ${panel('Services', servicesGrouped(), {count:state.services.length})}
+        ${panel('Overlays', overlaysPanel(), {count:state.overlays.length})}
+      </div>`;
+  }
+  if(top==='services'){
+    if(sub==='__all') return panel('Services — Inputs & Outputs', servicesGrouped({selectable:true}), {focus:true, count:state.services.length});
+    return detailFor(sub);
+  }
+  if(top==='overlays'){
+    if(sub==='__all') return panel('Overlays', overlaysPanel(), {focus:true, count:state.overlays.length});
+    if(sub==='feed')  return panel('Feed (SSE)',
+      `<div class="kv"><span class="k">Endpoint</span><span class="v">GET /overlay/feed</span>
+        <span class="k">Clients</span><span class="v">${state.overlayServer.sseClients} conectados</span>
+        <span class="k">Payload</span><span class="v">ChatMessage enriquecido (badges/emotes/cor) + StreamEvent</span></div>
+       <div class="group-label">Últimas mensagens no feed</div>${chatBody()}`, {focus:true});
+    const o = state.overlays.find(x=>x.id===sub);
+    return o ? overlayDetail(o) : '';
+  }
+  if(top==='activity'){
+    if(sub==='chat')       return panel(`Chat #${state.channel}`, chatBody(), {focus:true, count:state.chat.length});
+    if(sub==='events')     return panel('Event Log', filtersBar()+'<div style="height:6px"></div>'+eventsBody(), {focus:true, count:state.events.length});
+    if(sub==='highlights') return panel('Recent Highlights', highlightsBody(), {focus:true});
+  }
+  return '';
+}
+
+function renderD(){
+  const sv=state.overlayServer;
+  const topnav = D_TOP.map(s=>`<div class="t ${dTop===s.id?'sel':''}" data-top="${s.id}">${s.label}${s.n?`<span class="n">${s.n()}</span>`:''}</div>`).join('');
+  const subs = subsFor(dTop);
+  const curSub = dSub[dTop];
+  const side = subs.map(s=>`<div class="navitem ${curSub===s.id?'sel':''}" data-sub="${s.id}">
+      <span class="ic">${s.ic}</span><span>${s.label}</span>${s.tag?`<span class="badge-n">${s.tag}</span>`:''}</div>`).join('');
+  const content = contentForD(dTop, curSub);
+  const section = D_TOP.find(x=>x.id===dTop);
+
+  return `<div class="app">
+    <div class="topbar">
+      <div class="brand"><span class="logo">♥</span> streams-toolkit</div>
+      <div class="topnav">${topnav}</div>
+      <span class="spacer"></span>
+      <span class="chip on">${dot('green')} #${state.channel}</span>
+      <span class="chip ${sv.running?'on':''}">overlays :${sv.port}</span>
+      <span class="clock">live 02:14:33</span>
+    </div>
+    <div class="vD" style="flex:1;min-height:0">
+      <div class="side"><div class="crumb">${section.label}</div>${side}</div>
+      <div class="content">${content}</div>
+    </div>
+    ${statusbar([['←→','seção (topbar)'],['↑↓','sub-nav'],['Space','toggle'],['q','sair']])}
+  </div>`;
+}
+
+/* ---------------- variant plumbing ---------------- */
+const VARIANTS = {
+  A: { name:'Sidebar Nav',          render:renderA },
+  B: { name:'Dense Dashboard',      render:renderB },
+  C: { name:'Master / Detail',      render:renderC },
+  D: { name:'Topbar > Sidebar',     render:renderD },
+};
+const ORDER = ['A','B','C','D'];
+let current = (new URLSearchParams(location.search).get('variant')||'A').toUpperCase();
+if(!VARIANTS[current]) current='A';
+
+function paint(){
+  document.getElementById('stage').innerHTML = VARIANTS[current].render();
+  document.getElementById('lbl').innerHTML = `${current} <small>— ${VARIANTS[current].name}</small>`;
+  const url = new URL(location); url.searchParams.set('variant', current); history.replaceState(null,'',url);
+}
+function go(dir){
+  const i = ORDER.indexOf(current);
+  current = ORDER[(i + dir + ORDER.length) % ORDER.length];
+  paint();
+}
+
+document.getElementById('prev').onclick = ()=>go(-1);
+document.getElementById('next').onclick = ()=>go(1);
+window.addEventListener('keydown',(e)=>{
+  const tag=(e.target.tagName||'').toLowerCase();
+  if(tag==='input'||tag==='textarea'||e.target.isContentEditable) return;
+  if(e.key==='ArrowLeft') go(-1);
+  if(e.key==='ArrowRight') go(1);
+});
+
+/* in-variant interactivity (sidebar sections / module selection) */
+document.getElementById('stage').addEventListener('click',(e)=>{
+  const sec = e.target.closest('[data-sec]');
+  if(sec){ aSection = sec.dataset.sec; paint(); return; }
+  // Variant D primary nav (topbar) + sub-nav (sidebar)
+  const top = e.target.closest('[data-top]');
+  if(top && current==='D'){ dTop = top.dataset.top; paint(); return; }
+  const sub = e.target.closest('[data-sub]');
+  if(sub && current==='D'){ dSub[dTop] = sub.dataset.sub; paint(); return; }
+  const svc = e.target.closest('[data-svc]');
+  if(svc && current==='C'){ cSel = svc.dataset.svc; paint(); return; }
+});
+
+paint();
+</script>
+</body>
+</html>

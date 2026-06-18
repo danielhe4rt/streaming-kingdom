@@ -9,7 +9,7 @@ context.
 | Domain         | `src/domain/CONTEXT.md`            | Core event/chat/command/stats types — the language of the system       |
 | Application    | `src/application/CONTEXT.md`       | Config, shared state, orchestration of domain + infrastructure         |
 | Infrastructure | `src/infrastructure/CONTEXT.md`    | Adapters to external systems (Twitch, ElevenLabs, Hyprland, …)         |
-| Presentation   | `src/presentation/CONTEXT.md`      | Terminal UI — input, view state, theme, rendering                      |
+| Presentation   | `src/presentation/CONTEXT.md`      | Outbound renderers — `tui/` (terminal control panel) + `http/` (Overlays for OBS) |
 
 System-wide architectural decisions live in `docs/adr/`. Context-specific decisions live in
 `src/<layer>/docs/adr/` when they exist.
