@@ -18,7 +18,7 @@ mod tests;
 
 use tokio::sync::broadcast;
 
-use crate::domain::ChatSignal;
+use crate::domain::{ChatSignal, StreamEvent};
 
 /// Shared state handed to the Overlay controllers.
 #[derive(Clone)]
@@ -26,6 +26,10 @@ pub struct OverlayState {
     /// Chat broadcast the Overlay Feed subscribes to (one feed, N Overlays).
     /// Carries both new messages and CLEARMSG deletions as [`ChatSignal`]s.
     pub chat_tx: broadcast::Sender<ChatSignal>,
+    /// Stream-event broadcast (donation / sub / raid …). The same channel the
+    /// TUI subscribes to (ADR-0001 — neither renderer owns the other); the feed
+    /// fans these out so the Frame Overlay's Footer Bar can play Alerts.
+    pub event_tx: broadcast::Sender<StreamEvent>,
 }
 
 /// Start the Overlay HTTP server, binding `127.0.0.1:<port>`.
@@ -34,10 +38,11 @@ pub struct OverlayState {
 /// slice it starts immediately rather than waiting on a Start command.
 pub fn spawn(
     chat_tx: broadcast::Sender<ChatSignal>,
+    event_tx: broadcast::Sender<StreamEvent>,
     port: u16,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
-        let app = routes::router(OverlayState { chat_tx });
+        let app = routes::router(OverlayState { chat_tx, event_tx });
         let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
 
         let listener = match tokio::net::TcpListener::bind(addr).await {

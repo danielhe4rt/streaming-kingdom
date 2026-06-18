@@ -3,12 +3,15 @@
 //! The explicit serde contract serialized onto the Overlay Feed (`GET
 //! /overlay/feed`). These are the stable shapes the React Overlays render; the
 //! domain types stay free of presentation concerns. This slice carries chat
-//! messages and `chatMessageDeleted` moderation signals — a later slice adds the
-//! `streamEvent` variant to [`FeedEvent`].
+//! messages, `chatMessageDeleted` moderation signals, and `streamEvent`s
+//! (donation / sub / raid …) that the Frame Overlay's Footer Bar turns into
+//! Alerts.
 
 use serde::Serialize;
 
-use crate::domain::{ChatBadge, ChatMessage, ChatMessageDeleted, ChatSignal, MessageFragment};
+use crate::domain::{
+    ChatBadge, ChatMessage, ChatMessageDeleted, ChatSignal, MessageFragment, StreamEvent, SubTier,
+};
 
 /// One ordered piece of a chat message body, as the React side consumes it.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -103,13 +106,146 @@ impl From<&ChatMessageDeleted> for ChatMessageDeletedDto {
     }
 }
 
+/// A stream event as it appears on the Overlay Feed (donation / sub / raid …).
+///
+/// A presentation DTO mirroring the domain [`StreamEvent`], so the camelCase
+/// wire contract the React Overlays consume lives in the presentation layer and
+/// the domain type stays free of serialization concerns. The inner `type`
+/// discriminant selects the Footer Bar's Alert template; the outer `kind` on
+/// [`FeedEvent`] selects the stream-event branch.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum StreamEventDto {
+    Follow {
+        username: String,
+    },
+    Sub {
+        username: String,
+        tier: SubTierDto,
+        months: u32,
+    },
+    Donation {
+        username: String,
+        // serde's `rename_all` is not applied across `#[serde(flatten)]`, so the
+        // camelCase wire names are spelled out explicitly on the multi-word
+        // fields the Footer Bar reads.
+        #[serde(rename = "amountCents")]
+        amount_cents: u64,
+        message: String,
+    },
+    GiftSub {
+        username: String,
+        tier: SubTierDto,
+        total: u32,
+    },
+    Cheer {
+        username: String,
+        bits: u64,
+        message: String,
+    },
+    Raid {
+        #[serde(rename = "fromChannel")]
+        from_channel: String,
+        viewers: u32,
+    },
+    ViewerCountUpdate {
+        count: u32,
+    },
+}
+
+/// The sub tier as the React side consumes it (camelCase variants).
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum SubTierDto {
+    Tier1,
+    Tier2,
+    Tier3,
+    Prime,
+}
+
+impl From<&SubTier> for SubTierDto {
+    fn from(tier: &SubTier) -> Self {
+        match tier {
+            SubTier::Tier1 => SubTierDto::Tier1,
+            SubTier::Tier2 => SubTierDto::Tier2,
+            SubTier::Tier3 => SubTierDto::Tier3,
+            SubTier::Prime => SubTierDto::Prime,
+        }
+    }
+}
+
+impl From<&StreamEvent> for StreamEventDto {
+    fn from(event: &StreamEvent) -> Self {
+        match event {
+            StreamEvent::Follow { username } => StreamEventDto::Follow {
+                username: username.clone(),
+            },
+            StreamEvent::Sub {
+                username,
+                tier,
+                months,
+            } => StreamEventDto::Sub {
+                username: username.clone(),
+                tier: tier.into(),
+                months: *months,
+            },
+            StreamEvent::Donation {
+                username,
+                amount_cents,
+                message,
+            } => StreamEventDto::Donation {
+                username: username.clone(),
+                amount_cents: *amount_cents,
+                message: message.clone(),
+            },
+            StreamEvent::GiftSub {
+                username,
+                tier,
+                total,
+            } => StreamEventDto::GiftSub {
+                username: username.clone(),
+                tier: tier.into(),
+                total: *total,
+            },
+            StreamEvent::Cheer {
+                username,
+                bits,
+                message,
+            } => StreamEventDto::Cheer {
+                username: username.clone(),
+                bits: *bits,
+                message: message.clone(),
+            },
+            StreamEvent::Raid {
+                from_channel,
+                viewers,
+            } => StreamEventDto::Raid {
+                from_channel: from_channel.clone(),
+                viewers: *viewers,
+            },
+            StreamEvent::ViewerCountUpdate { count } => {
+                StreamEventDto::ViewerCountUpdate { count: *count }
+            }
+        }
+    }
+}
+
 /// A single Overlay Feed event. A tagged union so Overlays can switch on `kind`;
-/// this slice emits `chatMessage` and `chatMessageDeleted`.
+/// this slice emits `chatMessage`, `chatMessageDeleted`, and `streamEvent`.
+///
+/// The `streamEvent` variant flattens the [`StreamEventDto`] inline, so a
+/// donation serializes as `{ "kind": "streamEvent", "type": "donation", … }` —
+/// the Frame Overlay's Footer Bar switches on `kind` first, then on the inner
+/// `type` to pick an Alert template.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum FeedEvent {
     ChatMessage(ChatMessageDto),
     ChatMessageDeleted(ChatMessageDeletedDto),
+    StreamEvent {
+        #[serde(flatten)]
+        event: StreamEventDto,
+    },
 }
 
 impl FeedEvent {
@@ -128,6 +264,14 @@ impl FeedEvent {
         match signal {
             ChatSignal::Message(msg) => Self::chat(msg),
             ChatSignal::Deleted(deleted) => Self::deleted(deleted),
+        }
+    }
+
+    /// Build a feed event from a domain stream event (donation / sub / raid …).
+    /// The Frame Overlay's Footer Bar turns this into a queued Alert.
+    pub fn stream(event: &StreamEvent) -> Self {
+        FeedEvent::StreamEvent {
+            event: StreamEventDto::from(event),
         }
     }
 
@@ -234,6 +378,67 @@ mod tests {
         let json = FeedEvent::deleted(&ChatMessageDeleted::new("del-1")).to_json();
         assert!(json.contains("\"kind\":\"chatMessageDeleted\""), "got: {json}");
         assert!(json.contains("\"msgId\":\"del-1\""), "got: {json}");
+    }
+
+    // ── stream events on the feed (Frame Overlay Footer Bar Alerts) ──────────
+
+    #[test]
+    fn donation_serializes_to_feed_contract() {
+        use crate::domain::StreamEvent;
+
+        let feed = FeedEvent::stream(&StreamEvent::Donation {
+            username: "danielhe4rt".into(),
+            amount_cents: 500,
+            message: "vai rust!".into(),
+        });
+        let value: serde_json::Value = serde_json::to_value(&feed).unwrap();
+
+        // The domain StreamEvent is flattened inline: the outer `kind` selects
+        // the Footer Bar's stream-event branch, the inner `type` the template.
+        assert_eq!(value["kind"], "streamEvent");
+        assert_eq!(value["type"], "donation");
+        assert_eq!(value["username"], "danielhe4rt");
+        assert_eq!(value["amountCents"], 500);
+        assert_eq!(value["message"], "vai rust!");
+    }
+
+    #[test]
+    fn raid_and_sub_carry_their_type_discriminant() {
+        use crate::domain::{StreamEvent, SubTier};
+
+        let raid = serde_json::to_value(FeedEvent::stream(&StreamEvent::Raid {
+            from_channel: "ferris".into(),
+            viewers: 42,
+        }))
+        .unwrap();
+        assert_eq!(raid["kind"], "streamEvent");
+        assert_eq!(raid["type"], "raid");
+        assert_eq!(raid["fromChannel"], "ferris");
+        assert_eq!(raid["viewers"], 42);
+
+        let sub = serde_json::to_value(FeedEvent::stream(&StreamEvent::Sub {
+            username: "viewer".into(),
+            tier: SubTier::Tier1,
+            months: 3,
+        }))
+        .unwrap();
+        assert_eq!(sub["kind"], "streamEvent");
+        assert_eq!(sub["type"], "sub");
+        assert_eq!(sub["months"], 3);
+    }
+
+    #[test]
+    fn stream_event_to_json_emits_kind_and_type() {
+        use crate::domain::StreamEvent;
+
+        let json = FeedEvent::stream(&StreamEvent::Donation {
+            username: "u".into(),
+            amount_cents: 100,
+            message: String::new(),
+        })
+        .to_json();
+        assert!(json.contains("\"kind\":\"streamEvent\""), "got: {json}");
+        assert!(json.contains("\"type\":\"donation\""), "got: {json}");
     }
 
     #[test]

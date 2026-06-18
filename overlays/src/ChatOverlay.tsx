@@ -5,18 +5,12 @@ import type {
   FeedEventDto,
   FragmentDto,
 } from "./feed";
+import { FEED_URL } from "./feed";
 
 // Keep the rendered chat bounded so the Overlay never grows a scrollbar and
 // old messages age out. Later slices add time-based hideAfter; for the tracer
 // bullet a simple cap is enough.
 const MAX_MESSAGES = 30;
-
-// In dev the Vite server runs on its own origin, so point the feed at the Rust
-// server explicitly. In the embedded build the page is same-origin, so a
-// relative path is correct.
-const FEED_URL = import.meta.env.DEV
-  ? "http://127.0.0.1:1337/overlay/feed"
-  : "/overlay/feed";
 
 function Fragment({ fragment }: { fragment: FragmentDto }) {
   if (fragment.kind === "emote") {

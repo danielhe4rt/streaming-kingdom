@@ -14,22 +14,30 @@ use super::assets;
 use super::resources::FeedEvent;
 use super::OverlayState;
 
-/// `GET /overlay/feed` — the Overlay Feed: an SSE stream of chat as the M3 DTO.
+/// `GET /overlay/feed` — the Overlay Feed: one SSE stream carrying enriched chat
+/// plus stream events, each as the M3 [`FeedEvent`] DTO.
 ///
-/// Each broadcast `ChatSignal` (a new message or a CLEARMSG deletion) is mapped
-/// to a [`FeedEvent`] and emitted as one SSE `data:` frame. Lagged frames
-/// (buffer overflow under bursts) are skipped rather than terminating the
-/// stream, so the Overlay keeps rendering.
+/// Two broadcasts are merged into a single feed: the chat signal channel (new
+/// messages + CLEARMSG deletions) and the stream-event channel (donation / sub /
+/// raid …). One source, N Overlays — the Chat Overlay reads `chatMessage`s and
+/// the Frame Overlay's Footer Bar reads `streamEvent`s off the *same* stream.
+/// Lagged frames (buffer overflow under bursts) are skipped rather than
+/// terminating the stream, so the Overlays keep rendering.
 pub async fn feed(State(state): State<OverlayState>) -> Response {
-    let rx = state.chat_tx.subscribe();
-
-    let stream = BroadcastStream::new(rx).filter_map(|result| match result {
-        Ok(signal) => {
-            let json = FeedEvent::from_signal(&signal).to_json();
-            Some(Ok::<_, Infallible>(Event::default().data(json)))
-        }
+    let chat = BroadcastStream::new(state.chat_tx.subscribe()).filter_map(|result| match result {
+        Ok(signal) => Some(FeedEvent::from_signal(&signal)),
         // Lagged: the consumer fell behind; drop the gap and keep streaming.
         Err(_) => None,
+    });
+
+    let events = BroadcastStream::new(state.event_tx.subscribe()).filter_map(|result| match result {
+        Ok(event) => Some(FeedEvent::stream(&event)),
+        Err(_) => None,
+    });
+
+    // Interleave both broadcasts onto one SSE stream as they arrive.
+    let stream = chat.merge(events).map(|feed_event| {
+        Ok::<_, Infallible>(Event::default().data(feed_event.to_json()))
     });
 
     let sse = Sse::new(stream).keep_alive(
@@ -49,6 +57,13 @@ pub async fn feed(State(state): State<OverlayState>) -> Response {
 
 /// `GET /overlay/chat` — the Chat Overlay page (embedded `dist/index.html`).
 pub async fn chat() -> Html<&'static str> {
+    Html(assets::index_html())
+}
+
+/// `GET /overlay/frame` — the Frame Overlay page. Same embedded SPA as the Chat
+/// Overlay; the React entrypoint picks the Overlay from the URL path, so the
+/// branding frame + Footer Bar render here while chat renders at `/overlay/chat`.
+pub async fn frame() -> Html<&'static str> {
     Html(assets::index_html())
 }
 

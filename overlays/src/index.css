@@ -12,3 +12,27 @@ body,
   background: transparent;
   overflow: hidden;
 }
+
+/* Footer Bar transitions (Frame Overlay): Fun Facts cross-fade and the Alert
+   take-over slide. Plain CSS keyframes so the build needs no JS animation dep. */
+@keyframes fadein {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes alertin {
+  from {
+    opacity: 0;
+    transform: translateY(110%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

@@ -2,8 +2,9 @@
 // Overlay Feed DTOs (M3)
 //
 // These mirror the Rust serde DTOs serialized onto `GET /overlay/feed`. The
-// feed is a tagged union; this slice only emits `chatMessage`, but the shape is
-// stable so later slices (stream events, deletions) just add variants.
+// feed is a tagged union over `kind`: chat messages, single-message deletions,
+// and stream events (donation / sub / raid …) that the Frame Overlay's Footer
+// Bar turns into Alerts. One source, N Overlays consume the same stream.
 // ---------------------------------------------------------------------------
 
 export interface TextFragmentDto {
@@ -44,4 +45,80 @@ export interface ChatMessageDeletedDto {
   msgId: string;
 }
 
-export type FeedEventDto = ChatMessageDto | ChatMessageDeletedDto;
+// A stream event on the feed (donation / sub / raid …). The Rust side flattens
+// the domain enum, so the discriminant is the inner `type` while the outer
+// `kind` is always "streamEvent". The Frame Overlay's Footer Bar switches on
+// `kind` first, then `type` to choose an Alert template.
+export type SubTierDto = "tier1" | "tier2" | "tier3" | "prime";
+
+export interface FollowEventDto {
+  kind: "streamEvent";
+  type: "follow";
+  username: string;
+}
+
+export interface SubEventDto {
+  kind: "streamEvent";
+  type: "sub";
+  username: string;
+  tier: SubTierDto;
+  months: number;
+}
+
+export interface DonationEventDto {
+  kind: "streamEvent";
+  type: "donation";
+  username: string;
+  amountCents: number;
+  message: string;
+}
+
+export interface GiftSubEventDto {
+  kind: "streamEvent";
+  type: "giftSub";
+  username: string;
+  tier: SubTierDto;
+  total: number;
+}
+
+export interface CheerEventDto {
+  kind: "streamEvent";
+  type: "cheer";
+  username: string;
+  bits: number;
+  message: string;
+}
+
+export interface RaidEventDto {
+  kind: "streamEvent";
+  type: "raid";
+  fromChannel: string;
+  viewers: number;
+}
+
+export interface ViewerCountUpdateDto {
+  kind: "streamEvent";
+  type: "viewerCountUpdate";
+  count: number;
+}
+
+export type StreamEventDto =
+  | FollowEventDto
+  | SubEventDto
+  | DonationEventDto
+  | GiftSubEventDto
+  | CheerEventDto
+  | RaidEventDto
+  | ViewerCountUpdateDto;
+
+export type FeedEventDto =
+  | ChatMessageDto
+  | ChatMessageDeletedDto
+  | StreamEventDto;
+
+// In dev the Vite server runs on its own origin, so the feed must point at the
+// Rust server explicitly. In the embedded build the page is same-origin, so a
+// relative path is correct.
+export const FEED_URL = import.meta.env.DEV
+  ? "http://127.0.0.1:1337/overlay/feed"
+  : "/overlay/feed";

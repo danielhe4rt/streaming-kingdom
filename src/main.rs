@@ -187,8 +187,11 @@ async fn main() -> io::Result<()> {
 
     // Start the Overlay HTTP server (presentation/http) on boot — binds
     // 127.0.0.1:<overlays.port> and serves the Chat Overlay + Overlay Feed.
-    let _overlays_handle =
-        presentation::http::spawn(app.chat_tx.clone(), cfg.overlays.port);
+    let _overlays_handle = presentation::http::spawn(
+        app.chat_tx.clone(),
+        app.event_tx.clone(),
+        cfg.overlays.port,
+    );
     app.log_event(AppEvent::Info(format!(
         "Overlays http server on http://127.0.0.1:{}/overlay/chat",
         cfg.overlays.port
