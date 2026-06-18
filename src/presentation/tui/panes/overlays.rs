@@ -20,7 +20,7 @@ pub fn draw_all(frame: &mut Frame, area: Rect, app: &AppState, tui: &TuiState) {
 
     let mut lines = vec![server_line(app, tui), Line::from("")];
 
-    lines.push(group_label("Overlays served"));
+    lines.push(format::section_label("Overlays served"));
     for o in OverlayId::ALL.iter() {
         lines.push(overlay_row(o, tui));
     }
@@ -28,11 +28,11 @@ pub fn draw_all(frame: &mut Frame, area: Rect, app: &AppState, tui: &TuiState) {
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
         "  Each Overlay is one OBS browser source consuming the shared SSE feed.",
-        Style::default().fg(Color::DarkGray),
+        Style::default().fg(COLOR_MUTED),
     )));
     lines.push(Line::from(Span::styled(
         "  Toggle the server with Space/Enter while on this section.",
-        Style::default().fg(Color::DarkGray),
+        Style::default().fg(COLOR_MUTED),
     )));
 
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
@@ -59,19 +59,19 @@ pub fn draw_detail(frame: &mut Frame, area: Rect, id: OverlayId, _app: &AppState
                 def.name.to_string(),
                 Style::default().add_modifier(Modifier::BOLD),
             ),
-            Span::styled(format!("  ({state})"), Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("  ({state})"), Style::default().fg(COLOR_MUTED)),
         ]),
         Line::from(""),
-        kv("OBS source", &url),
-        kv("Consumes", "shared SSE feed (chat + stream events)"),
-        kv(
+        format::kv("OBS source", &url),
+        format::kv("Consumes", "shared SSE feed (chat + stream events)"),
+        format::kv(
             "Component",
             &format!("overlays/src/components/{}Overlay", def.name),
         ),
         Line::from(""),
         Line::from(Span::styled(
             "  Paste the OBS source URL into a Browser Source in OBS.",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(COLOR_MUTED),
         )),
     ];
 
@@ -86,14 +86,14 @@ pub fn draw_feed(frame: &mut Frame, area: Rect, tui: &TuiState) {
 
     let endpoint = format!("http://127.0.0.1:{}/overlay/feed", tui.overlays_port);
     let mut lines = vec![
-        kv("Endpoint", &endpoint),
-        kv("Transport", "Server-Sent Events (one feed, N overlays)"),
-        kv(
+        format::kv("Endpoint", &endpoint),
+        format::kv("Transport", "Server-Sent Events (one feed, N overlays)"),
+        format::kv(
             "Payload",
             "ChatMessage (badges/emotes/colour) + StreamEvent + delete",
         ),
         Line::from(""),
-        group_label("Recent messages on the feed"),
+        format::section_label("Recent messages on the feed"),
     ];
 
     for msg in tui.chat_messages.iter().rev().take(12) {
@@ -130,7 +130,7 @@ fn server_line(app: &AppState, tui: &TuiState) -> Line<'static> {
         ),
         Span::styled(
             format!("   http://127.0.0.1:{}", tui.overlays_port),
-            Style::default().fg(COLOR_INFO),
+            Style::default().fg(COLOR_ACCENT),
         ),
     ])
 }
@@ -149,26 +149,7 @@ fn overlay_row(def: &OverlayDef, tui: &TuiState) -> Line<'static> {
         ),
         Span::styled(
             nav::overlay_url(def, tui.overlays_port),
-            Style::default().fg(COLOR_INFO),
+            Style::default().fg(COLOR_ACCENT),
         ),
-    ])
-}
-
-fn group_label(label: &str) -> Line<'static> {
-    Line::from(Span::styled(
-        format!(" {label} "),
-        Style::default()
-            .fg(Color::Cyan)
-            .add_modifier(Modifier::BOLD),
-    ))
-}
-
-fn kv(key: &str, value: &str) -> Line<'static> {
-    Line::from(vec![
-        Span::styled(
-            format!("  {key:<11} "),
-            Style::default().fg(Color::DarkGray),
-        ),
-        Span::raw(value.to_string()),
     ])
 }

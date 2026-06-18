@@ -14,17 +14,21 @@ use ratatui::widgets::{Block, BorderType, Borders, Padding};
 
 use super::nav::{Section, SubItem};
 use super::state::TuiState;
-use super::theme::COLOR_SUB;
+use super::theme::{COLOR_ACCENT, COLOR_PRIMARY};
 use crate::application::AppState;
 
 /// Main draw entry point: an outer bordered frame wrapping
 /// topbar (top) → [sidebar | content] → status bar.
 pub fn draw(frame: &mut Frame, app: &AppState, tui: &TuiState) {
-    // Outer border + padding around the whole UI.
+    // Outer border + padding around the whole UI — the signature purple frame.
     let outer = Block::default()
+        .title(Line::from(Span::styled(
+            " ♥ streams-toolkit ",
+            Style::default().fg(COLOR_ACCENT).add_modifier(Modifier::BOLD),
+        )))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(COLOR_SUB))
+        .border_style(Style::default().fg(COLOR_PRIMARY))
         .padding(Padding::horizontal(1));
     let root = outer.inner(frame.area());
     frame.render_widget(outer, frame.area());

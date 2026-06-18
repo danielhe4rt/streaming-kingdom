@@ -13,7 +13,12 @@ use super::super::theme::*;
 /// Top bar: brand, the primary section tabs, and live status chips.
 pub fn draw_topbar(frame: &mut Frame, area: Rect, app: &AppState, tui: &TuiState) {
     let mut spans = vec![
-        Span::styled(" ♥ streams-toolkit ", Style::default().fg(COLOR_SUB)),
+        Span::styled(
+            " ♥ streams-toolkit ",
+            Style::default()
+                .fg(COLOR_ACCENT)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw("  "),
     ];
 
@@ -22,10 +27,10 @@ pub fn draw_topbar(frame: &mut Frame, area: Rect, app: &AppState, tui: &TuiState
         let style = if selected {
             Style::default()
                 .fg(Color::Black)
-                .bg(Color::Cyan)
+                .bg(COLOR_PRIMARY)
                 .add_modifier(Modifier::BOLD)
         } else {
-            Style::default().fg(Color::Gray)
+            Style::default().fg(COLOR_MUTED)
         };
         spans.push(Span::styled(format!(" {} ", section.label()), style));
         spans.push(Span::raw(" "));
@@ -59,7 +64,7 @@ pub fn draw_topbar(frame: &mut Frame, area: Rect, app: &AppState, tui: &TuiState
     let bar = Paragraph::new(Line::from(spans)).block(
         Block::default()
             .borders(Borders::BOTTOM)
-            .border_style(Style::default().fg(Color::DarkGray)),
+            .border_style(Style::default().fg(COLOR_BORDER)),
     );
     frame.render_widget(bar, area);
 }
@@ -69,7 +74,7 @@ pub fn draw_topbar(frame: &mut Frame, area: Rect, app: &AppState, tui: &TuiState
 pub fn draw_sidebar(frame: &mut Frame, area: Rect, tui: &TuiState) {
     let block = Block::default()
         .borders(Borders::RIGHT)
-        .border_style(Style::default().fg(Color::DarkGray));
+        .border_style(Style::default().fg(COLOR_BORDER));
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
@@ -78,9 +83,9 @@ pub fn draw_sidebar(frame: &mut Frame, area: Rect, tui: &TuiState) {
 
     let mut lines = vec![
         Line::from(Span::styled(
-            format!(" {} ", section.label()),
+            format!(" ▸ {} ", section.label().to_uppercase()),
             Style::default()
-                .fg(Color::DarkGray)
+                .fg(COLOR_ACCENT)
                 .add_modifier(Modifier::BOLD),
         )),
         Line::from(""),
@@ -88,16 +93,19 @@ pub fn draw_sidebar(frame: &mut Frame, area: Rect, tui: &TuiState) {
 
     for item in nav::sub_items(section) {
         let selected = item == current;
-        let marker = if selected { "›" } else { " " };
-        let style = if selected {
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD)
+        // Consistent selection bar: bright-purple ▌ + bold purple label.
+        let (marker, style) = if selected {
+            (
+                "▌ ",
+                Style::default()
+                    .fg(COLOR_PRIMARY)
+                    .add_modifier(Modifier::BOLD),
+            )
         } else {
-            Style::default().fg(Color::Gray)
+            ("  ", Style::default().fg(COLOR_MUTED))
         };
         lines.push(Line::from(vec![
-            Span::styled(format!(" {marker} "), style),
+            Span::styled(marker, Style::default().fg(COLOR_PRIMARY)),
             Span::styled(sub_label_with_tag(item), style),
         ]));
     }
@@ -109,13 +117,24 @@ pub fn draw_sidebar(frame: &mut Frame, area: Rect, tui: &TuiState) {
 pub fn draw_status_bar(frame: &mut Frame, area: Rect, app: &AppState) {
     if let Some(msg) = &app.status_message {
         let bar = Paragraph::new(format!(" {msg}"))
-            .style(Style::default().fg(Color::Red).bg(Color::Black));
+            .style(Style::default().fg(COLOR_ERROR).add_modifier(Modifier::BOLD));
         frame.render_widget(bar, area);
     } else {
-        let help =
-            " q: quit | Tab: section | j/k: sub-nav | Space: toggle | J/K: scroll | 1-6: filters";
-        let bar = Paragraph::new(help).style(Style::default().fg(Color::DarkGray).bg(Color::Black));
-        frame.render_widget(bar, area);
+        let help = Line::from(vec![
+            Span::styled(" q ", Style::default().fg(COLOR_ACCENT)),
+            Span::styled("quit   ", Style::default().fg(COLOR_MUTED)),
+            Span::styled("Tab ", Style::default().fg(COLOR_ACCENT)),
+            Span::styled("section   ", Style::default().fg(COLOR_MUTED)),
+            Span::styled("j/k ", Style::default().fg(COLOR_ACCENT)),
+            Span::styled("sub-nav   ", Style::default().fg(COLOR_MUTED)),
+            Span::styled("Space ", Style::default().fg(COLOR_ACCENT)),
+            Span::styled("toggle   ", Style::default().fg(COLOR_MUTED)),
+            Span::styled("J/K ", Style::default().fg(COLOR_ACCENT)),
+            Span::styled("scroll   ", Style::default().fg(COLOR_MUTED)),
+            Span::styled("1-6 ", Style::default().fg(COLOR_ACCENT)),
+            Span::styled("filters", Style::default().fg(COLOR_MUTED)),
+        ]);
+        frame.render_widget(Paragraph::new(help), area);
     }
 }
 

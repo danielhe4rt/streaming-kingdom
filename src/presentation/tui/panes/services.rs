@@ -24,12 +24,12 @@ pub fn draw_all(frame: &mut Frame, area: Rect, app: &AppState, tui: &TuiState) {
     };
 
     let mut lines: Vec<Line> = Vec::new();
-    lines.push(group_label("Inputs"));
+    lines.push(format::section_label("Inputs"));
     for def in service::inputs() {
         lines.push(format::service_line(def, app, tui, selected == Some(def.id)));
     }
     lines.push(Line::from(""));
-    lines.push(group_label("Outputs"));
+    lines.push(format::section_label("Outputs"));
     for def in service::outputs() {
         lines.push(format::service_line(def, app, tui, selected == Some(def.id)));
     }
@@ -61,9 +61,9 @@ pub fn draw_detail(frame: &mut Frame, area: Rect, id: ServiceId, app: &AppState,
     };
 
     let mut lines = vec![
-        kv("Kind", kind),
+        format::kv("Kind", kind),
         Line::from(vec![
-            Span::styled("  Status   ", Style::default().fg(Color::DarkGray)),
+            Span::styled("  Status      ", Style::default().fg(COLOR_MUTED)),
             Span::styled(format!("{dot} "), Style::default().fg(dot_color)),
             Span::raw(status),
         ]),
@@ -72,23 +72,23 @@ pub fn draw_detail(frame: &mut Frame, area: Rect, id: ServiceId, app: &AppState,
     if def.toggleable {
         let enabled = service::is_enabled(def.id, app);
         lines.push(Line::from(vec![
-            Span::styled("  Control  ", Style::default().fg(Color::DarkGray)),
+            Span::styled("  Control     ", Style::default().fg(COLOR_MUTED)),
             Span::styled(
                 if enabled { "ON" } else { "OFF" }.to_string(),
                 Style::default().fg(if enabled { COLOR_TOGGLE_ON } else { COLOR_TOGGLE_OFF }),
             ),
             Span::styled(
                 "  (Space/Enter to toggle)",
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(COLOR_MUTED),
             ),
         ]));
     } else {
-        lines.push(kv("Control", "read-only (monitor)"));
+        lines.push(format::kv("Control", "read-only (monitor)"));
     }
 
     if id == ServiceId::Overlays {
         lines.push(Line::from(""));
-        lines.push(group_label("OBS browser sources"));
+        lines.push(format::section_label("OBS browser sources"));
         for o in super::super::nav::OverlayId::ALL.iter() {
             lines.push(Line::from(vec![
                 Span::raw("  "),
@@ -98,27 +98,11 @@ pub fn draw_detail(frame: &mut Frame, area: Rect, id: ServiceId, app: &AppState,
                 ),
                 Span::styled(
                     super::super::nav::overlay_url(o, tui.overlays_port),
-                    Style::default().fg(COLOR_INFO),
+                    Style::default().fg(COLOR_ACCENT),
                 ),
             ]));
         }
     }
 
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
-}
-
-fn group_label(label: &str) -> Line<'static> {
-    Line::from(Span::styled(
-        format!(" {label} "),
-        Style::default()
-            .fg(Color::Cyan)
-            .add_modifier(Modifier::BOLD),
-    ))
-}
-
-fn kv(key: &str, value: &str) -> Line<'static> {
-    Line::from(vec![
-        Span::styled(format!("  {key:<8} "), Style::default().fg(Color::DarkGray)),
-        Span::raw(value.to_string()),
-    ])
 }

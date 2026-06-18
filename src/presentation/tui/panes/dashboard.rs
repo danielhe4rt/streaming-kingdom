@@ -35,15 +35,28 @@ fn draw_kpis(frame: &mut Frame, area: Rect, app: &AppState) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
+    let label = |t: &'static str| Span::styled(t, Style::default().fg(COLOR_MUTED));
     let line = Line::from(vec![
-        Span::styled("Viewers ", Style::default().fg(Color::Cyan)),
-        Span::raw(format!("{}    ", app.stats.viewer_count)),
-        Span::styled("Followers ", Style::default().fg(Color::Magenta)),
-        Span::raw(format!("{}    ", app.stats.followers_today)),
-        Span::styled("Subs ", Style::default().fg(Color::Green)),
-        Span::raw(format!("{}    ", app.stats.subs_today)),
-        Span::styled("Uptime ", Style::default().fg(Color::DarkGray)),
-        Span::raw(format!("{hours:02}:{mins:02}:{secs:02}")),
+        label("VIEWERS "),
+        Span::styled(
+            format!("{}    ", app.stats.viewer_count),
+            Style::default().fg(COLOR_ACCENT).add_modifier(Modifier::BOLD),
+        ),
+        label("FOLLOWERS "),
+        Span::styled(
+            format!("{}    ", app.stats.followers_today),
+            Style::default().fg(COLOR_FOLLOW).add_modifier(Modifier::BOLD),
+        ),
+        label("SUBS "),
+        Span::styled(
+            format!("{}    ", app.stats.subs_today),
+            Style::default().fg(COLOR_SUB).add_modifier(Modifier::BOLD),
+        ),
+        label("UPTIME "),
+        Span::styled(
+            format!("{hours:02}:{mins:02}:{secs:02}"),
+            Style::default().add_modifier(Modifier::BOLD),
+        ),
     ]);
     frame.render_widget(Paragraph::new(line), inner);
 }
@@ -54,11 +67,11 @@ fn draw_services_summary(frame: &mut Frame, area: Rect, app: &AppState, tui: &Tu
     frame.render_widget(block, area);
 
     let mut lines: Vec<Line> = Vec::new();
-    lines.push(group_label("Inputs"));
+    lines.push(format::section_label("Inputs"));
     for def in service::inputs() {
         lines.push(format::service_line(def, app, tui, false));
     }
-    lines.push(group_label("Outputs"));
+    lines.push(format::section_label("Outputs"));
     for def in service::outputs() {
         lines.push(format::service_line(def, app, tui, false));
     }
@@ -97,18 +110,9 @@ fn draw_overlays_summary(frame: &mut Frame, area: Rect, app: &AppState, tui: &Tu
             ),
             Span::styled(
                 nav::overlay_url(o, tui.overlays_port),
-                Style::default().fg(COLOR_INFO),
+                Style::default().fg(COLOR_ACCENT),
             ),
         ]));
     }
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
-}
-
-fn group_label(label: &str) -> Line<'static> {
-    Line::from(Span::styled(
-        format!(" {label} "),
-        Style::default()
-            .fg(Color::Cyan)
-            .add_modifier(Modifier::BOLD),
-    ))
 }

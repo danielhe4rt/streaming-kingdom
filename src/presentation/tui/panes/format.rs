@@ -5,7 +5,7 @@
 //! new Service/Overlay flows through one path.
 
 use ratatui::prelude::*;
-use ratatui::widgets::{Block, Borders};
+use ratatui::widgets::{Block, BorderType, Borders};
 
 use crate::application::AppState;
 use crate::domain::{AppEvent, AppEventEntry, EventGroup, StreamEvent};
@@ -14,17 +14,35 @@ use super::super::service::{self, ServiceDef, ServiceId};
 use super::super::state::TuiState;
 use super::super::theme::*;
 
-/// A bordered, optionally-focused block with a padded title.
+/// A rounded, optionally-focused block with a lavender title. Focused blocks
+/// take the vivid primary border; secondary blocks the muted one.
 pub fn make_block(title: &str, focused: bool) -> Block<'static> {
-    let border_style = if focused {
-        Style::default().fg(Color::Cyan)
-    } else {
-        Style::default().fg(Color::DarkGray)
-    };
+    let border = if focused { COLOR_PRIMARY } else { COLOR_BORDER };
     Block::default()
-        .title(format!(" {title} "))
+        .title(Line::from(Span::styled(
+            format!(" {title} "),
+            Style::default().fg(COLOR_ACCENT).add_modifier(Modifier::BOLD),
+        )))
         .borders(Borders::ALL)
-        .border_style(border_style)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(border))
+}
+
+/// An uppercase section label (e.g. `▸ INPUTS`) in lavender — the consistent
+/// group header across panes.
+pub fn section_label(label: &str) -> Line<'static> {
+    Line::from(Span::styled(
+        format!(" ▸ {} ", label.to_uppercase()),
+        Style::default().fg(COLOR_ACCENT).add_modifier(Modifier::BOLD),
+    ))
+}
+
+/// A key/value detail line: muted key, plain value. Used by detail panes.
+pub fn kv(key: &str, value: &str) -> Line<'static> {
+    Line::from(vec![
+        Span::styled(format!("  {key:<11} "), Style::default().fg(COLOR_MUTED)),
+        Span::raw(value.to_string()),
+    ])
 }
 
 /// Resolve the status dot + colour + short status text for a Service, reading
@@ -118,16 +136,22 @@ pub fn service_status(def: &ServiceDef, app: &AppState, tui: &TuiState) -> (&'st
 
 /// One Service row as a TUI line: cursor, status dot, name, kind tag, toggle.
 pub fn service_line(def: &ServiceDef, app: &AppState, tui: &TuiState, selected: bool) -> Line<'static> {
-    let cursor = if selected { "> " } else { "  " };
     let (dot, dot_color, status) = service_status(def, app, tui);
 
+    // Selection affordance: a bright-purple left bar + bold purple name.
+    let (marker, name_style) = if selected {
+        (
+            "▌ ",
+            Style::default().fg(COLOR_PRIMARY).add_modifier(Modifier::BOLD),
+        )
+    } else {
+        ("  ", Style::default().add_modifier(Modifier::BOLD))
+    };
+
     let mut spans = vec![
-        Span::raw(cursor.to_string()),
+        Span::styled(marker, Style::default().fg(COLOR_PRIMARY)),
         Span::styled(format!("{dot} "), Style::default().fg(dot_color)),
-        Span::styled(
-            def.name.to_string(),
-            Style::default().add_modifier(Modifier::BOLD),
-        ),
+        Span::styled(def.name.to_string(), name_style),
     ];
 
     if def.toggleable {
@@ -141,13 +165,13 @@ pub fn service_line(def: &ServiceDef, app: &AppState, tui: &TuiState, selected: 
     } else {
         spans.push(Span::styled(
             " (monitor)".to_string(),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(COLOR_MUTED),
         ));
     }
 
     spans.push(Span::styled(
         format!("  {status}"),
-        Style::default().fg(Color::DarkGray),
+        Style::default().fg(COLOR_MUTED),
     ));
 
     Line::from(spans)
@@ -279,7 +303,7 @@ pub fn format_app_event(entry: &AppEventEntry) -> Line<'static> {
     };
 
     Line::from(vec![
-        Span::styled(format!("[{ts}] "), Style::default().fg(Color::DarkGray)),
+        Span::styled(format!("[{ts}] "), Style::default().fg(COLOR_MUTED)),
         Span::styled(format!("{icon} "), Style::default().fg(color)),
         Span::raw(body),
     ])

@@ -5,7 +5,7 @@
 //! pane.
 
 use ratatui::prelude::*;
-use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
+use ratatui::widgets::{Block, BorderType, Borders, Paragraph, Wrap};
 
 use crate::application::AppState;
 
@@ -89,9 +89,9 @@ pub fn draw_highlights(frame: &mut Frame, area: Rect, tui: &TuiState) {
 
 fn event_log_block(tui: &TuiState) -> Block<'static> {
     let on_style = Style::default()
-        .fg(Color::Green)
+        .fg(COLOR_CONNECTED)
         .add_modifier(Modifier::BOLD);
-    let off_style = Style::default().fg(Color::DarkGray);
+    let off_style = Style::default().fg(COLOR_MUTED);
 
     let filter_labels = [
         ("S", tui.filter_stream),
@@ -102,7 +102,10 @@ fn event_log_block(tui: &TuiState) -> Block<'static> {
         ("C", tui.filter_chat),
     ];
 
-    let mut title_spans: Vec<Span> = vec![Span::raw(" Event Log ")];
+    let mut title_spans: Vec<Span> = vec![Span::styled(
+        " Event Log ",
+        Style::default().fg(COLOR_ACCENT).add_modifier(Modifier::BOLD),
+    )];
     for (label, active) in filter_labels {
         let style = if active { on_style } else { off_style };
         title_spans.push(Span::styled(format!("[{label}]"), style));
@@ -112,5 +115,6 @@ fn event_log_block(tui: &TuiState) -> Block<'static> {
     Block::default()
         .title(Line::from(title_spans))
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan))
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(COLOR_PRIMARY))
 }

@@ -31,6 +31,20 @@ pub const COLOR_CONNECTED: Color = Color::Rgb(0xc3, 0xe8, 0x8d);
 pub const COLOR_INACTIVE: Color = Color::Rgb(0x67, 0x6e, 0x95);
 pub const COLOR_STARTING: Color = Color::Rgb(0xff, 0xcb, 0x6b);
 
+// ---------------------------------------------------------------------------
+// Purple design system (chrome) — one dominant hue for all structure, with the
+// semantic status colours above kept as sharp accents where they carry meaning.
+// ---------------------------------------------------------------------------
+
+/// Vivid purple — focus borders, active selection, the outer frame.
+pub const COLOR_PRIMARY: Color = Color::Rgb(0xae, 0x81, 0xff);
+/// Lavender — block titles, brand, URLs, links.
+pub const COLOR_ACCENT: Color = Color::Rgb(0xc7, 0x92, 0xea);
+/// Muted purple — unfocused borders and dividers.
+pub const COLOR_BORDER: Color = Color::Rgb(0x4d, 0x44, 0x6e);
+/// Dim purple-grey — secondary/label text (chrome replacement for DarkGray).
+pub const COLOR_MUTED: Color = Color::Rgb(0x6b, 0x63, 0x8f);
+
 /// Extract highlights from stream events.
 pub fn maybe_highlight(event: &StreamEvent) -> Option<HighlightEntry> {
     match event {
