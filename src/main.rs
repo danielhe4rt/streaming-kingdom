@@ -1,4 +1,3 @@
-mod alerts;
 mod application;
 mod domain;
 mod infrastructure;
