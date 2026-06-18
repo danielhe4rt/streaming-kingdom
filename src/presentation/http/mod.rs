@@ -18,13 +18,14 @@ mod tests;
 
 use tokio::sync::broadcast;
 
-use crate::domain::ChatMessage;
+use crate::domain::ChatSignal;
 
 /// Shared state handed to the Overlay controllers.
 #[derive(Clone)]
 pub struct OverlayState {
     /// Chat broadcast the Overlay Feed subscribes to (one feed, N Overlays).
-    pub chat_tx: broadcast::Sender<ChatMessage>,
+    /// Carries both new messages and CLEARMSG deletions as [`ChatSignal`]s.
+    pub chat_tx: broadcast::Sender<ChatSignal>,
 }
 
 /// Start the Overlay HTTP server, binding `127.0.0.1:<port>`.
@@ -32,7 +33,7 @@ pub struct OverlayState {
 /// Follows the existing `spawn()` pattern (returns a `JoinHandle`); for this
 /// slice it starts immediately rather than waiting on a Start command.
 pub fn spawn(
-    chat_tx: broadcast::Sender<ChatMessage>,
+    chat_tx: broadcast::Sender<ChatSignal>,
     port: u16,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {

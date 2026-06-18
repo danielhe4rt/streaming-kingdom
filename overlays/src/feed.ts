@@ -37,4 +37,11 @@ export interface ChatMessageDto {
   fragments: FragmentDto[];
 }
 
-export type FeedEventDto = ChatMessageDto;
+// Single-message moderation (CLEARMSG): one message was deleted. The Overlay
+// removes the message node whose key matches `msgId`.
+export interface ChatMessageDeletedDto {
+  kind: "chatMessageDeleted";
+  msgId: string;
+}
+
+export type FeedEventDto = ChatMessageDto | ChatMessageDeletedDto;

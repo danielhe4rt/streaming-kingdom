@@ -13,7 +13,7 @@ use ratatui::prelude::*;
 use tokio::sync::{broadcast, mpsc};
 
 use crate::application::{AppState, EventLogConfig};
-use crate::domain::{AppEvent, ChatMessage, FeatureCommand, StreamEvent};
+use crate::domain::{AppEvent, ChatSignal, FeatureCommand, StreamEvent};
 use crate::infrastructure::hyprland::{PrivacyCommand, PrivacyStatus};
 use crate::infrastructure::livepix::{LivepixCommand, LivepixStatus};
 use crate::infrastructure::waybar;
@@ -126,7 +126,7 @@ async fn event_loop(
     livepix_status_rx: &mut mpsc::Receiver<LivepixStatus>,
     hyprland_rx: &mut mpsc::Receiver<AppEvent>,
     twitch_event_rx: &mut mpsc::Receiver<AppEvent>,
-    chat_rx: &mut broadcast::Receiver<ChatMessage>,
+    chat_rx: &mut broadcast::Receiver<ChatSignal>,
 ) -> io::Result<()> {
     let mut prev_waybar_enabled = app.waybar_enabled;
     let mut prev_privacy_enabled = app.privacy_enabled;
@@ -303,20 +303,29 @@ async fn event_loop(
         // Drain Twitch IRC chat messages into chat buffer and event log.
         // The chat broadcast may report Lagged if a burst overflows the buffer;
         // try_recv returns Err in that case, harmlessly ending this drain early.
-        while let Ok(msg) = chat_rx.try_recv() {
-            tui.twitch_chat.connected = true;
-            tui.twitch_chat.message_count += 1;
+        while let Ok(signal) = chat_rx.try_recv() {
+            match signal {
+                ChatSignal::Message(msg) => {
+                    tui.twitch_chat.connected = true;
+                    tui.twitch_chat.message_count += 1;
 
-            let text = msg.plain_text();
-            tui.push_chat(ChatEntry {
-                username: msg.username.clone(),
-                text: text.clone(),
-            });
+                    let text = msg.plain_text();
+                    tui.push_chat(ChatEntry {
+                        username: msg.username.clone(),
+                        text: text.clone(),
+                    });
 
-            app.log_event(AppEvent::ChatMessage {
-                username: msg.username,
-                text,
-            });
+                    app.log_event(AppEvent::ChatMessage {
+                        username: msg.username,
+                        text,
+                    });
+                }
+                // The Overlay keys its DOM by msg_id and removes the node; the
+                // TUI chat view is an append-only log with no per-message id, so
+                // a single-message delete is a no-op here (it still reaches the
+                // Overlay Feed via the same broadcast).
+                ChatSignal::Deleted(_) => {}
+            }
         }
 
         // Process any pending feature commands.

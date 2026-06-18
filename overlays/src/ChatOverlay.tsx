@@ -78,6 +78,10 @@ export default function ChatOverlay() {
               ? next.slice(next.length - MAX_MESSAGES)
               : next;
           });
+        } else if (dto.kind === "chatMessageDeleted") {
+          // Single-message moderation: drop the node with the matching msgId so
+          // the deleted message vanishes from the Overlay in real time.
+          setMessages((prev) => prev.filter((m) => m.msgId !== dto.msgId));
         }
       } catch {
         // Ignore malformed frames; the feed is best-effort for a display source.

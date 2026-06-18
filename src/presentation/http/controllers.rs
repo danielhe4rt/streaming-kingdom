@@ -16,15 +16,16 @@ use super::OverlayState;
 
 /// `GET /overlay/feed` — the Overlay Feed: an SSE stream of chat as the M3 DTO.
 ///
-/// Each broadcast `ChatMessage` is mapped to a [`FeedEvent`] and emitted as one
-/// SSE `data:` frame. Lagged frames (buffer overflow under bursts) are skipped
-/// rather than terminating the stream, so the Overlay keeps rendering.
+/// Each broadcast `ChatSignal` (a new message or a CLEARMSG deletion) is mapped
+/// to a [`FeedEvent`] and emitted as one SSE `data:` frame. Lagged frames
+/// (buffer overflow under bursts) are skipped rather than terminating the
+/// stream, so the Overlay keeps rendering.
 pub async fn feed(State(state): State<OverlayState>) -> Response {
     let rx = state.chat_tx.subscribe();
 
     let stream = BroadcastStream::new(rx).filter_map(|result| match result {
-        Ok(msg) => {
-            let json = FeedEvent::chat(&msg).to_json();
+        Ok(signal) => {
+            let json = FeedEvent::from_signal(&signal).to_json();
             Some(Ok::<_, Infallible>(Event::default().data(json)))
         }
         // Lagged: the consumer fell behind; drop the gap and keep streaming.

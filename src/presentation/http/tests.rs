@@ -10,11 +10,11 @@ use tokio::io::AsyncReadExt;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
 
-use crate::domain::{ChatBadge, ChatMessage, EmoteSpan};
+use crate::domain::{ChatBadge, ChatMessage, ChatMessageDeleted, ChatSignal, EmoteSpan};
 
 use super::{routes, OverlayState};
 
-async fn boot_server() -> (std::net::SocketAddr, broadcast::Sender<ChatMessage>) {
+async fn boot_server() -> (std::net::SocketAddr, broadcast::Sender<ChatSignal>) {
     let (chat_tx, _) = broadcast::channel(16);
     let app = routes::router(OverlayState {
         chat_tx: chat_tx.clone(),
@@ -66,7 +66,7 @@ async fn feed_streams_chat_message_as_dto() {
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     chat_tx
-        .send(
+        .send(ChatSignal::Message(
             ChatMessage::from_text(
                 "msg-42",
                 "danielhe4rt",
@@ -79,7 +79,7 @@ async fn feed_streams_chat_message_as_dto() {
                 version: "1".into(),
                 url: Some("https://cdn/mod.png".into()),
             }]),
-        )
+        ))
         .unwrap();
 
     // Read until we see the SSE data frame for our message (bounded by timeout).
@@ -124,14 +124,14 @@ async fn feed_carries_ordered_emote_fragments() {
 
     // "hey Kappa" → text run then a single native emote fragment.
     chat_tx
-        .send(ChatMessage::from_fragments(
+        .send(ChatSignal::Message(ChatMessage::from_fragments(
             "msg-emote",
             "randers",
             Some("#19E6E6"),
             "rustlang",
             "hey Kappa",
             &[EmoteSpan::new("25", 4, 9)],
-        ))
+        )))
         .unwrap();
 
     let mut buf = vec![0u8; 4096];
@@ -164,4 +164,48 @@ async fn feed_carries_ordered_emote_fragments() {
     let text_at = acc.find("\"kind\":\"text\"").unwrap();
     let emote_at = acc.find("\"kind\":\"emote\"").unwrap();
     assert!(text_at < emote_at, "text fragment should precede emote; got: {acc}");
+}
+
+#[tokio::test]
+async fn feed_streams_single_message_delete_as_dto() {
+    let (addr, chat_tx) = boot_server().await;
+
+    let mut stream = tokio::net::TcpStream::connect(addr).await.unwrap();
+    let request = "GET /overlay/feed HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\n\r\n";
+    tokio::io::AsyncWriteExt::write_all(&mut stream, request.as_bytes())
+        .await
+        .unwrap();
+
+    // Let the SSE handler subscribe before we publish the moderation signal.
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    // A moderator deletes a single message (CLEARMSG) — the same broadcast
+    // carries the delete to the Overlay Feed.
+    chat_tx
+        .send(ChatSignal::Deleted(ChatMessageDeleted::new("msg-42")))
+        .unwrap();
+
+    let mut buf = vec![0u8; 4096];
+    let mut acc = String::new();
+    let read = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let n = stream.read(&mut buf).await.unwrap();
+            if n == 0 {
+                break;
+            }
+            acc.push_str(&String::from_utf8_lossy(&buf[..n]));
+            if acc.contains("chatMessageDeleted") {
+                break;
+            }
+        }
+    })
+    .await;
+
+    assert!(read.is_ok(), "timed out waiting for SSE frame; got: {acc}");
+    assert!(acc.contains("data:"), "expected an SSE data frame, got: {acc}");
+    assert!(
+        acc.contains("\"kind\":\"chatMessageDeleted\""),
+        "got: {acc}"
+    );
+    assert!(acc.contains("\"msgId\":\"msg-42\""), "got: {acc}");
 }

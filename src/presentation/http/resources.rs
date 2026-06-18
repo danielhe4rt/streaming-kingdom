@@ -2,13 +2,13 @@
 //!
 //! The explicit serde contract serialized onto the Overlay Feed (`GET
 //! /overlay/feed`). These are the stable shapes the React Overlays render; the
-//! domain types stay free of presentation concerns. This slice only carries
-//! chat — later slices add `streamEvent` and `chatMessageDeleted` variants to
-//! [`FeedEvent`].
+//! domain types stay free of presentation concerns. This slice carries chat
+//! messages and `chatMessageDeleted` moderation signals — a later slice adds the
+//! `streamEvent` variant to [`FeedEvent`].
 
 use serde::Serialize;
 
-use crate::domain::{ChatBadge, ChatMessage, MessageFragment};
+use crate::domain::{ChatBadge, ChatMessage, ChatMessageDeleted, ChatSignal, MessageFragment};
 
 /// One ordered piece of a chat message body, as the React side consumes it.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -87,18 +87,48 @@ impl From<&ChatMessage> for ChatMessageDto {
     }
 }
 
+/// A single-message moderation delete, as the React side consumes it. The Chat
+/// Overlay removes the message node whose key matches `msgId`.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatMessageDeletedDto {
+    pub msg_id: String,
+}
+
+impl From<&ChatMessageDeleted> for ChatMessageDeletedDto {
+    fn from(deleted: &ChatMessageDeleted) -> Self {
+        Self {
+            msg_id: deleted.msg_id.clone(),
+        }
+    }
+}
+
 /// A single Overlay Feed event. A tagged union so Overlays can switch on `kind`;
-/// this slice only emits `chatMessage`.
+/// this slice emits `chatMessage` and `chatMessageDeleted`.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum FeedEvent {
     ChatMessage(ChatMessageDto),
+    ChatMessageDeleted(ChatMessageDeletedDto),
 }
 
 impl FeedEvent {
     /// Build a feed event from a domain chat message.
     pub fn chat(msg: &ChatMessage) -> Self {
         FeedEvent::ChatMessage(ChatMessageDto::from(msg))
+    }
+
+    /// Build a feed event from a single-message moderation delete (CLEARMSG).
+    pub fn deleted(deleted: &ChatMessageDeleted) -> Self {
+        FeedEvent::ChatMessageDeleted(ChatMessageDeletedDto::from(deleted))
+    }
+
+    /// Build a feed event from any chat broadcast signal.
+    pub fn from_signal(signal: &ChatSignal) -> Self {
+        match signal {
+            ChatSignal::Message(msg) => Self::chat(msg),
+            ChatSignal::Deleted(deleted) => Self::deleted(deleted),
+        }
     }
 
     /// Serialize to the JSON line carried in the SSE `data:` field.
@@ -179,5 +209,44 @@ mod tests {
         let json = FeedEvent::chat(&msg).to_json();
         assert!(json.contains("\"kind\":\"chatMessage\""));
         assert!(json.contains("\"msgId\":\"id2\""));
+    }
+
+    // ── M3 (extended) — single-message delete (CLEARMSG) DTO ─────────────────
+
+    #[test]
+    fn delete_serializes_to_feed_contract() {
+        use crate::domain::ChatMessageDeleted;
+
+        let feed = FeedEvent::deleted(&ChatMessageDeleted::new("abc-123"));
+        let value: serde_json::Value = serde_json::to_value(&feed).unwrap();
+
+        // The tagged union discriminates on `kind`, and the only payload field
+        // is the camelCased `msgId` the Overlay keys its DOM nodes by.
+        assert_eq!(value["kind"], "chatMessageDeleted");
+        assert_eq!(value["msgId"], "abc-123");
+        assert!(value.get("username").is_none(), "delete carries no body");
+    }
+
+    #[test]
+    fn delete_to_json_emits_kind_and_msg_id() {
+        use crate::domain::ChatMessageDeleted;
+
+        let json = FeedEvent::deleted(&ChatMessageDeleted::new("del-1")).to_json();
+        assert!(json.contains("\"kind\":\"chatMessageDeleted\""), "got: {json}");
+        assert!(json.contains("\"msgId\":\"del-1\""), "got: {json}");
+    }
+
+    #[test]
+    fn from_signal_maps_both_chat_variants() {
+        use crate::domain::{ChatMessageDeleted, ChatSignal};
+
+        let msg = ChatMessage::from_text("m-1", "viewer", None, "chan", "hi");
+        let feed = FeedEvent::from_signal(&ChatSignal::Message(msg));
+        assert!(matches!(feed, FeedEvent::ChatMessage(_)));
+
+        let feed = FeedEvent::from_signal(&ChatSignal::Deleted(ChatMessageDeleted::new("m-1")));
+        let value = serde_json::to_value(&feed).unwrap();
+        assert_eq!(value["kind"], "chatMessageDeleted");
+        assert_eq!(value["msgId"], "m-1");
     }
 }

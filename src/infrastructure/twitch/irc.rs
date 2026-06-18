@@ -7,7 +7,7 @@ use twitch_irc::message::{PrivmsgMessage, ServerMessage};
 use twitch_irc::{ClientConfig, SecureTCPTransport, TwitchIRCClient};
 
 use super::badges::BadgeMap;
-use crate::domain::{AppEvent, ChatBadge, ChatMessage, EmoteSpan};
+use crate::domain::{AppEvent, ChatBadge, ChatMessage, ChatMessageDeleted, ChatSignal, EmoteSpan};
 
 const MAX_RECONNECT_DELAY: Duration = Duration::from_secs(120);
 const INITIAL_RECONNECT_DELAY: Duration = Duration::from_secs(1);
@@ -36,7 +36,7 @@ impl ChatClient {
         }
     }
 
-    pub async fn run(self, tx: broadcast::Sender<ChatMessage>, event_tx: mpsc::Sender<AppEvent>) {
+    pub async fn run(self, tx: broadcast::Sender<ChatSignal>, event_tx: mpsc::Sender<AppEvent>) {
         let mut delay = INITIAL_RECONNECT_DELAY;
 
         loop {
@@ -55,7 +55,7 @@ impl ChatClient {
 
     async fn connect_and_listen(
         &self,
-        tx: &broadcast::Sender<ChatMessage>,
+        tx: &broadcast::Sender<ChatSignal>,
         event_tx: &mpsc::Sender<AppEvent>,
     ) {
         let authenticated = self.login_name.is_some() && self.oauth_token.is_some();
@@ -108,10 +108,18 @@ impl ChatClient {
             .await;
 
         while let Some(message) = incoming.recv().await {
-            if let ServerMessage::Privmsg(msg) = message {
-                // broadcast::send errors only when there are no receivers yet;
-                // safe to ignore for a fire-and-forget chat fan-out.
-                let _ = tx.send(enrich_privmsg(msg, &self.badges));
+            // broadcast::send errors only when there are no receivers yet; safe
+            // to ignore for a fire-and-forget chat fan-out.
+            match message {
+                ServerMessage::Privmsg(msg) => {
+                    let _ = tx.send(ChatSignal::Message(enrich_privmsg(msg, &self.badges)));
+                }
+                // Single-message moderation: a moderator deleted one message.
+                // CLEARCHAT (timeout/ban) is intentionally out of scope here.
+                ServerMessage::ClearMsg(msg) => {
+                    let _ = tx.send(ChatSignal::Deleted(ChatMessageDeleted::new(msg.message_id)));
+                }
+                _ => {}
             }
         }
     }

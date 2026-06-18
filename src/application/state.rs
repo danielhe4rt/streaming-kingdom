@@ -3,7 +3,7 @@ use std::time::Instant;
 use tokio::sync::{broadcast, mpsc};
 
 use crate::application::config::EventLogConfig;
-use crate::domain::{AppEvent, AppEventEntry, ChatMessage, FeatureCommand, StreamEvent, StreamStats};
+use crate::domain::{AppEvent, AppEventEntry, ChatSignal, FeatureCommand, StreamEvent, StreamStats};
 
 // ---------------------------------------------------------------------------
 // Central application state
@@ -23,9 +23,11 @@ pub struct AppState {
     // broadcast: stream events (1 producer → N consumers)
     pub event_tx: broadcast::Sender<StreamEvent>,
 
-    // broadcast: chat messages (IRC producer → TUI + Overlay Feed consumers).
-    // Mirrors event_tx so neither the TUI nor the http feed owns the chat.
-    pub chat_tx: broadcast::Sender<ChatMessage>,
+    // broadcast: chat signals — new messages and CLEARMSG deletions (IRC
+    // producer → TUI + Overlay Feed consumers). Mirrors event_tx so neither the
+    // TUI nor the http feed owns the chat; both moderation and messages ride the
+    // same channel so a delete can never overtake the message it removes out of band.
+    pub chat_tx: broadcast::Sender<ChatSignal>,
 
     // mpsc: TUI commands → feature modules
     pub command_tx: mpsc::Sender<FeatureCommand>,
@@ -74,7 +76,7 @@ impl AppState {
     }
 
     /// Subscribe to the chat broadcast channel (TUI + Overlay Feed).
-    pub fn subscribe_chat(&self) -> broadcast::Receiver<ChatMessage> {
+    pub fn subscribe_chat(&self) -> broadcast::Receiver<ChatSignal> {
         self.chat_tx.subscribe()
     }
 
