@@ -100,6 +100,7 @@ Robust prose docs live in `docs/arch/`, one numbered file per domain module and 
 | `src/domain/chat.rs`                 | `docs/arch/2-domain-chat.md`       |
 | `src/domain/commands.rs`             | `docs/arch/3-domain-commands.md`   |
 | `src/domain/stats.rs`                | `docs/arch/4-domain-stats.md`      |
+| `src/domain/media_player.rs`         | `docs/arch/12-domain-media-player.md` |
 | `src/domain/app_event.rs`            | `docs/arch/5-domain-app-event.md`  |
 | `src/infrastructure/twitch/`         | `docs/arch/6-infra-twitch.md`      |
 | `src/infrastructure/elevenlabs/`     | `docs/arch/7-infra-elevenlabs.md`  |
@@ -107,5 +108,6 @@ Robust prose docs live in `docs/arch/`, one numbered file per domain module and 
 | `src/infrastructure/livepix/`        | `docs/arch/9-infra-livepix.md`     |
 | `src/infrastructure/obs/`            | `docs/arch/10-infra-obs.md`        |
 | `src/infrastructure/waybar/`         | `docs/arch/11-infra-waybar.md`     |
+| `src/infrastructure/media_player/`   | `docs/arch/13-infra-media-player.md` |
 
 For **infrastructure** docs especially: whenever the external service usage changes (new endpoint, scope, env var, protocol, crate), reflect it in the matching doc. Each doc carries a "Keep in sync" header pointing back here. When you add a new domain module or infra service, add a numbered doc and a row above.

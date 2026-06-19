@@ -94,7 +94,7 @@ pub fn draw_detail(frame: &mut Frame, area: Rect, id: OverlayId, _app: &AppState
         format::kv("Consumes", "shared SSE feed (chat + stream events)"),
         format::kv(
             "Component",
-            &format!("overlays/src/components/{}Overlay", def.name),
+            &format!("overlays/src/overlays/{}Overlay.tsx", def.name),
         ),
         Line::from(""),
         Line::from(Span::styled(

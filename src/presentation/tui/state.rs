@@ -126,6 +126,11 @@ pub struct TuiState {
 
     /// Overlay server port (from `[overlays.port]`), used to render OBS URLs.
     pub overlays_port: u16,
+
+    /// Latest now-playing track (ambient state from the media-player observer),
+    /// refreshed each tick from the `watch` receiver. `None` = nothing playing /
+    /// no player. Read by the Spotify Service row.
+    pub now_playing: Option<crate::domain::NowPlaying>,
 }
 
 impl TuiState {
@@ -158,6 +163,7 @@ impl TuiState {
             filter_chat: event_log_config.show_chat,
             tts_available,
             overlays_port,
+            now_playing: None,
         }
     }
 

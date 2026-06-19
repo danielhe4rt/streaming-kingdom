@@ -1,9 +1,11 @@
 use std::time::Instant;
 
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc, watch};
 
 use crate::application::config::EventLogConfig;
-use crate::domain::{AppEvent, AppEventEntry, ChatSignal, FeatureCommand, StreamEvent, StreamStats};
+use crate::domain::{
+    AppEvent, AppEventEntry, ChatSignal, FeatureCommand, NowPlaying, StreamEvent, StreamStats,
+};
 
 // ---------------------------------------------------------------------------
 // Central application state
@@ -34,6 +36,11 @@ pub struct AppState {
     pub command_tx: mpsc::Sender<FeatureCommand>,
     pub command_rx: mpsc::Receiver<FeatureCommand>,
 
+    // watch: ambient now-playing STATE (latest value, not an event). The media
+    // player observer publishes here; the Overlay Feed and the TUI Spotify row
+    // both subscribe. `None` means stopped / no player. NOT logged into AppEvent.
+    pub now_playing_tx: watch::Sender<Option<NowPlaying>>,
+
     // Running stats
     pub stats: StreamStats,
 
@@ -53,6 +60,9 @@ impl AppState {
         let (event_tx, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
         let (chat_tx, _) = broadcast::channel(CHAT_CHANNEL_CAPACITY);
         let (command_tx, command_rx) = mpsc::channel(COMMAND_CHANNEL_CAPACITY);
+        // Keep the sender; the initial receiver is dropped — consumers subscribe
+        // on demand via `subscribe_now_playing()`.
+        let (now_playing_tx, _) = watch::channel(None);
 
         Self {
             waybar_enabled: false,
@@ -64,6 +74,7 @@ impl AppState {
             chat_tx,
             command_tx,
             command_rx,
+            now_playing_tx,
             stats: StreamStats::new(),
             event_log: Vec::new(),
             max_events: event_log_config.max_events,
@@ -85,6 +96,11 @@ impl AppState {
     /// Get a cloneable command sender for the TUI (or tests).
     pub fn command_sender(&self) -> mpsc::Sender<FeatureCommand> {
         self.command_tx.clone()
+    }
+
+    /// Subscribe to the ambient now-playing state (Overlay Feed + TUI).
+    pub fn subscribe_now_playing(&self) -> watch::Receiver<Option<NowPlaying>> {
+        self.now_playing_tx.subscribe()
     }
 
     /// Broadcast a stream event and update stats.

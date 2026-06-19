@@ -1,19 +1,13 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import ChatOverlay from "./ChatOverlay";
-import FrameOverlay from "./FrameOverlay";
+import CoworkingOverlay from "./overlays/CoworkingOverlay";
 import "./index.css";
 
-// One embedded SPA serves every Overlay; the Rust `http` renderer serves this
-// same bundle at `/overlay/chat` and `/overlay/frame`. We pick the Overlay from
-// the URL path so a single build covers both browser sources.
-function pickOverlay() {
-  if (window.location.pathname.endsWith("/overlay/frame")) {
-    return <FrameOverlay />;
-  }
-  return <ChatOverlay />;
-}
-
+// One embedded SPA serves the single Coworking Overlay (one OBS browser source,
+// camera behind the transparent cutout). The Rust `http` renderer serves this
+// same bundle; there is no longer a chat-vs-frame path to pick.
 createRoot(document.getElementById("root")!).render(
-  <StrictMode>{pickOverlay()}</StrictMode>,
+  <StrictMode>
+    <CoworkingOverlay />
+  </StrictMode>,
 );

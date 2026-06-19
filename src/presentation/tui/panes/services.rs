@@ -34,9 +34,12 @@ pub fn draw_all(frame: &mut Frame, area: Rect, app: &AppState, tui: &TuiState) {
         lines.push(format::service_line(def, app, tui, selected == Some(def.id)));
     }
 
-    // Live summary footer.
+    // Live summary footer. Spotify counts as "live" whenever a track is loaded
+    // (Playing or Paused) — the observer clears to None when nothing is playing.
+    let spotify_live = tui.now_playing.is_some();
     let inputs_live = tui.twitch_eventsub.connected as u32
         + tui.twitch_chat.connected as u32
+        + spotify_live as u32
         + tui.livepix.running as u32
         + tui.hyprland.listening as u32
         + tui.privacy.running as u32;
@@ -45,7 +48,7 @@ pub fn draw_all(frame: &mut Frame, area: Rect, app: &AppState, tui: &TuiState) {
     lines.push(Line::from(vec![
         Span::styled("  Inputs ", Style::default().fg(COLOR_MUTED)),
         Span::styled(
-            format!("{inputs_live}/5 live"),
+            format!("{inputs_live}/6 live"),
             Style::default().fg(COLOR_CONNECTED),
         ),
         Span::styled("   Outputs ", Style::default().fg(COLOR_MUTED)),

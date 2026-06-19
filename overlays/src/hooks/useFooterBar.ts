@@ -16,7 +16,7 @@
 // ---------------------------------------------------------------------------
 
 import { useCallback, useReducer } from "react";
-import type { StreamEventDto } from "./feed";
+import type { StreamEventDto } from "../feed";
 
 export type FooterMode = "funfacts" | "alert";
 

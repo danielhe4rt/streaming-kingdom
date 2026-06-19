@@ -73,6 +73,24 @@ pub fn service_status(def: &ServiceDef, app: &AppState, tui: &TuiState) -> (&'st
                 ("○", COLOR_INACTIVE, "Disconnected".into())
             }
         }
+        ServiceId::Spotify => {
+            // Ambient now-playing state: a filled dot while a track is loaded
+            // (green = Playing, amber = Paused), hollow when nothing is playing.
+            use crate::domain::PlaybackStatus;
+            match &tui.now_playing {
+                Some(np) => {
+                    let track = format!("{} — {}", np.title, np.artist);
+                    match np.status {
+                        PlaybackStatus::Playing => ("●", COLOR_CONNECTED, format!("Playing · {track}")),
+                        PlaybackStatus::Paused => ("●", COLOR_STARTING, format!("Paused · {track}")),
+                        // Defensive: the observer clears to None on Stopped, but
+                        // render a sensible state if a Stopped value ever arrives.
+                        PlaybackStatus::Stopped => ("○", COLOR_INACTIVE, "Nothing playing".into()),
+                    }
+                }
+                None => ("○", COLOR_INACTIVE, "Nothing playing".into()),
+            }
+        }
         ServiceId::Livepix => {
             if tui.livepix.running {
                 let oauth = if tui.livepix.oauth_ok { "✓" } else { "✗" };

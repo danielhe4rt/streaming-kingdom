@@ -61,6 +61,22 @@ single previously-shown message by **msgId**. Carried on the Overlay Feed so the
 drop the DOM node. (`CLEARCHAT` timeout/ban handling is deferred past v1.)
 _Avoid_: clear, purge, ban event
 
+### Media Player (Now Playing)
+
+**NowPlaying**: The currently-playing track as ambient **state** (not an event): title, artist, album,
+an optional cover-art url, and a **PlaybackStatus**. Latest-value-wins — there is at most one NowPlaying
+"now". Rendered by the Coworking Overlay's Now Playing widget and shown in the TUI's Spotify Service row.
+_Avoid_: Track, Song, MediaState, Metadata (reserve "metadata" for the raw MPRIS payload the adapter parses).
+
+**PlaybackStatus**: Whether the player is `Playing`, `Paused`, or `Stopped`. Drives the widget's
+animation (disc/EQ active while Playing, frozen while Paused) and visibility (Stopped / no player →
+the widget falls back to its placeholder).
+_Avoid_: state (too generic), PlayState.
+
+**MediaPlayer**: The external source of NowPlaying — an MPRIS player on D-Bus (v1 targets Spotify
+specifically). The toolkit only *observes* it; it never controls playback.
+_Avoid_: Spotify (the concept is the MPRIS player; Spotify is the v1 instance).
+
 ### Statistics
 
 **StreamStats**: A mutable aggregate of three running counters (viewer_count, followers_today, subs_today) that tracks engagement metrics for a single stream session.
@@ -105,6 +121,7 @@ _Avoid_: queue, pipe, buffer
 - A **FeatureCommand** is sent via a **command channel** (MPSC) to update one **feature toggle** in AppState.
 - Each **FeatureCommand** variant (EnableWaybar, DisableWaybar, etc.) maps 1:1 to a **feature toggle** boolean.
 - When a **FeatureCommand** is applied, it emits an **AppEvent** variant FeatureToggled, which is logged in the unified event log.
+- A **NowPlaying** is ambient **state** carried on a `watch` channel (latest-value), unlike **StreamEvent** / **ChatMessage** which are discrete and broadcast. It is *not* wrapped in an **AppEvent** — it is observed live by the Overlay Feed and the TUI, not logged to history.
 
 ## Example Dialogue
 

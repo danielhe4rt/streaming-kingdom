@@ -167,6 +167,13 @@ async fn main() -> io::Result<()> {
         Arc::from(cfg.obs.capture_source.as_str()),
     );
 
+    // Spawn the media-player observer: publishes ambient now-playing STATE on a
+    // watch channel via `playerctl --follow -p spotify`. Graceful if absent.
+    let _media_handle = infrastructure::media_player::spawn(app.now_playing_tx.clone());
+    app.log_event(AppEvent::Info(
+        "Spotify now-playing observer started (playerctl --follow)".into(),
+    ));
+
     // Spawn TTS worker (returns None if API key is empty)
     let tts_tx = infrastructure::elevenlabs::spawn(cfg.livepix.tts.clone());
     let tts_available = tts_tx.is_some();
@@ -197,10 +204,11 @@ async fn main() -> io::Result<()> {
         overlays_status_tx,
         app.chat_tx.clone(),
         app.event_tx.clone(),
+        app.subscribe_now_playing(),
         cfg.overlays.port,
     );
     app.log_event(AppEvent::Info(format!(
-        "Overlays Output ready (toggle to serve on http://127.0.0.1:{}/overlay/chat)",
+        "Overlays Output ready (toggle to serve on http://127.0.0.1:{}/overlay/coworking)",
         cfg.overlays.port
     )));
 
@@ -264,6 +272,7 @@ async fn main() -> io::Result<()> {
         hyprland_rx,
         twitch_event_rx,
     };
+    let now_playing_rx = app.subscribe_now_playing();
     presentation::run(
         &mut app,
         &cfg.waybar.output,
@@ -272,6 +281,7 @@ async fn main() -> io::Result<()> {
         &cfg.twitch.channel,
         tts_available,
         cfg.overlays.port,
+        now_playing_rx,
     )
     .await
 }

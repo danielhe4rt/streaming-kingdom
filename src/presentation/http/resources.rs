@@ -4,13 +4,14 @@
 //! /overlay/feed`). These are the stable shapes the React Overlays render; the
 //! domain types stay free of presentation concerns. This slice carries chat
 //! messages, `chatMessageDeleted` moderation signals, and `streamEvent`s
-//! (donation / sub / raid …) that the Frame Overlay's Footer Bar turns into
+//! (donation / sub / raid …) that the Coworking Overlay's Footer Bar turns into
 //! Alerts.
 
 use serde::Serialize;
 
 use crate::domain::{
-    ChatBadge, ChatMessage, ChatMessageDeleted, ChatSignal, MessageFragment, StreamEvent, SubTier,
+    ChatBadge, ChatMessage, ChatMessageDeleted, ChatSignal, MessageFragment, NowPlaying,
+    PlaybackStatus, StreamEvent, SubTier,
 };
 
 /// One ordered piece of a chat message body, as the React side consumes it.
@@ -230,12 +231,30 @@ impl From<&StreamEvent> for StreamEventDto {
     }
 }
 
+/// The currently-playing Spotify track as the React side consumes it.
+///
+/// now-playing is ambient *state* (latest value on a watch channel), not a
+/// logged event — but it rides the same Overlay Feed so the Coworking Overlay's
+/// Now Playing widget can render it. `status` mirrors the domain
+/// [`PlaybackStatus`]; the React side falls back to the placeholder on
+/// `"stopped"`. `artUrl` is the real `mpris:artUrl` album cover when present.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct NowPlayingDto {
+    pub title: String,
+    pub artist: String,
+    pub album: String,
+    pub art_url: Option<String>,
+    pub status: &'static str,
+}
+
 /// A single Overlay Feed event. A tagged union so Overlays can switch on `kind`;
-/// this slice emits `chatMessage`, `chatMessageDeleted`, and `streamEvent`.
+/// this slice emits `chatMessage`, `chatMessageDeleted`, `streamEvent`, and
+/// `nowPlaying`.
 ///
 /// The `streamEvent` variant flattens the [`StreamEventDto`] inline, so a
 /// donation serializes as `{ "kind": "streamEvent", "type": "donation", … }` —
-/// the Frame Overlay's Footer Bar switches on `kind` first, then on the inner
+/// the Coworking Overlay's Footer Bar switches on `kind` first, then on the inner
 /// `type` to pick an Alert template.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -246,6 +265,7 @@ pub enum FeedEvent {
         #[serde(flatten)]
         event: StreamEventDto,
     },
+    NowPlaying(NowPlayingDto),
 }
 
 impl FeedEvent {
@@ -268,11 +288,42 @@ impl FeedEvent {
     }
 
     /// Build a feed event from a domain stream event (donation / sub / raid …).
-    /// The Frame Overlay's Footer Bar turns this into a queued Alert.
+    /// The Coworking Overlay's Footer Bar turns this into a queued Alert.
     pub fn stream(event: &StreamEvent) -> Self {
         FeedEvent::StreamEvent {
             event: StreamEventDto::from(event),
         }
+    }
+
+    /// Build a feed event from the current now-playing state (Playing/Paused).
+    /// `status` is mapped from the domain [`PlaybackStatus`]; the Coworking
+    /// Overlay's Now Playing widget renders the track (animation reflects status).
+    pub fn now_playing(now_playing: &NowPlaying) -> Self {
+        let status = match now_playing.status {
+            PlaybackStatus::Playing => "playing",
+            PlaybackStatus::Paused => "paused",
+            PlaybackStatus::Stopped => "stopped",
+        };
+        FeedEvent::NowPlaying(NowPlayingDto {
+            title: now_playing.title.clone(),
+            artist: now_playing.artist.clone(),
+            album: now_playing.album.clone(),
+            art_url: now_playing.art_url.clone(),
+            status,
+        })
+    }
+
+    /// Build a "cleared" now-playing feed event — emitted when playback stops or
+    /// no player is present. Empty strings + no art + `"stopped"` status drive
+    /// the Now Playing widget back to its placeholder.
+    pub fn now_playing_cleared() -> Self {
+        FeedEvent::NowPlaying(NowPlayingDto {
+            title: String::new(),
+            artist: String::new(),
+            album: String::new(),
+            art_url: None,
+            status: "stopped",
+        })
     }
 
     /// Serialize to the JSON line carried in the SSE `data:` field.
@@ -380,7 +431,7 @@ mod tests {
         assert!(json.contains("\"msgId\":\"del-1\""), "got: {json}");
     }
 
-    // ── stream events on the feed (Frame Overlay Footer Bar Alerts) ──────────
+    // ── stream events on the feed (Coworking Overlay Footer Bar Alerts) ──────────
 
     #[test]
     fn donation_serializes_to_feed_contract() {
@@ -439,6 +490,77 @@ mod tests {
         .to_json();
         assert!(json.contains("\"kind\":\"streamEvent\""), "got: {json}");
         assert!(json.contains("\"type\":\"donation\""), "got: {json}");
+    }
+
+    // ── now-playing on the feed (Coworking Overlay Now Playing widget) ───────────
+
+    #[test]
+    fn now_playing_serializes_to_feed_contract() {
+        use crate::domain::{NowPlaying, PlaybackStatus};
+
+        let feed = FeedEvent::now_playing(&NowPlaying {
+            title: "Money".into(),
+            artist: "Pink Floyd".into(),
+            album: "The Dark Side of the Moon".into(),
+            art_url: Some("https://i.scdn.co/image/abc".into()),
+            status: PlaybackStatus::Playing,
+        });
+        let value: serde_json::Value = serde_json::to_value(&feed).unwrap();
+
+        // The outer `kind` selects the now-playing branch; the camelCase fields
+        // are what the React Now Playing widget renders.
+        assert_eq!(value["kind"], "nowPlaying");
+        assert_eq!(value["title"], "Money");
+        assert_eq!(value["artist"], "Pink Floyd");
+        assert_eq!(value["album"], "The Dark Side of the Moon");
+        assert_eq!(value["artUrl"], "https://i.scdn.co/image/abc");
+        assert_eq!(value["status"], "playing");
+    }
+
+    #[test]
+    fn now_playing_maps_paused_status() {
+        use crate::domain::{NowPlaying, PlaybackStatus};
+
+        let value = serde_json::to_value(FeedEvent::now_playing(&NowPlaying {
+            title: "Time".into(),
+            artist: "Pink Floyd".into(),
+            album: "The Dark Side of the Moon".into(),
+            art_url: None,
+            status: PlaybackStatus::Paused,
+        }))
+        .unwrap();
+        assert_eq!(value["kind"], "nowPlaying");
+        assert_eq!(value["status"], "paused");
+        assert!(value["artUrl"].is_null(), "no art url serializes as null");
+    }
+
+    #[test]
+    fn now_playing_cleared_is_stopped_and_empty() {
+        let value: serde_json::Value =
+            serde_json::to_value(FeedEvent::now_playing_cleared()).unwrap();
+
+        assert_eq!(value["kind"], "nowPlaying");
+        assert_eq!(value["status"], "stopped");
+        assert_eq!(value["title"], "");
+        assert_eq!(value["artist"], "");
+        assert_eq!(value["album"], "");
+        assert!(value["artUrl"].is_null(), "cleared carries no art url");
+    }
+
+    #[test]
+    fn now_playing_to_json_emits_kind() {
+        use crate::domain::{NowPlaying, PlaybackStatus};
+
+        let json = FeedEvent::now_playing(&NowPlaying {
+            title: "Breathe".into(),
+            artist: "Pink Floyd".into(),
+            album: "The Dark Side of the Moon".into(),
+            art_url: None,
+            status: PlaybackStatus::Playing,
+        })
+        .to_json();
+        assert!(json.contains("\"kind\":\"nowPlaying\""), "got: {json}");
+        assert!(json.contains("\"status\":\"playing\""), "got: {json}");
     }
 
     #[test]

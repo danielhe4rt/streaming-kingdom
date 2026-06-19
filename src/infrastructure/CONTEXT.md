@@ -12,6 +12,7 @@ Each submodule has its own `infra:*` triage label:
 - `livepix/` (`infra:livepix`) — donation webhooks
 - `obs/` (`infra:obs`) — OBS control
 - `waybar/` (`infra:waybar`) — config, events, style
+- `media_player/` (`infra:media_player`) — MPRIS now-playing observer (Spotify)
 
 ## Glossary
 
@@ -166,8 +167,32 @@ Constant (value 15) limiting the number of recent events stored in memory and in
 **opacity fading**:
 Visual effect in the waybar display where the 4 most recent events are shown with progressively lower alpha values (100%, 75%, 50%, 25%) to indicate recency and age.
 
+### Media Player (MPRIS Now Playing)
+
+**MPRIS**:
+The freedesktop Media Player Remote Interfacing Specification exposed over D-Bus
+(`org.mpris.MediaPlayer2.<player>`). The source of track metadata; v1 targets `…spotify`.
+
+**Now Playing observer**:
+A long-running task that spawns `playerctl --follow -p spotify` once and reads its stdout line by
+line — one line per track/status change (event-driven, no polling). Each line is parsed into a domain
+**NowPlaying** and pushed onto the now-playing `watch` channel only when it differs from the last.
+Graceful degradation: if `playerctl` is missing or exits (no player running), the observer logs and
+retries with backoff, and the channel holds `None` so consumers show their placeholder.
+_Avoid_: poller, Spotify watcher (it observes any change via `--follow`, and the term is MPRIS-generic).
+
+**now-playing watch channel**:
+A `tokio::sync::watch<Option<NowPlaying>>` — latest-value semantics so a freshly-opened Overlay (OBS
+browser source) or the TUI immediately sees the current track, not the next change. Contrast with the
+`broadcast` channels used for discrete chat/stream events.
+
+**artUrl**:
+The `mpris:artUrl` field from MPRIS metadata (Spotify serves an https CDN cover image), carried on
+NowPlaying and rendered as the real album cover in the Overlay's Now Playing widget.
+
 ## Relationships
 
+- A **Now Playing observer** parses **MPRIS** metadata into a domain **NowPlaying** and publishes it on the **now-playing watch channel**; the Overlay Feed and the TUI both subscribe.
 - A **TwitchClient** opens a WebSocket connection to **EventSub** and receives a **session_id** in the welcome message.
 - The **TwitchClient** uses the **session_id** to register subscriptions via the **Helix** API, requesting multiple event types (follow, subscribe, cheer, raid, etc.).
 - Each **EventSub** notification is deduplicated using **message deduplication** and parsed into a **StreamEvent**, which is broadcast to the application.

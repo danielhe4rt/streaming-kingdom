@@ -8,7 +8,7 @@ use axum::http::{StatusCode, header};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{Html, IntoResponse, Response};
 use tokio_stream::StreamExt;
-use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::wrappers::{BroadcastStream, WatchStream};
 
 use super::assets;
 use super::resources::FeedEvent;
@@ -17,10 +17,13 @@ use super::OverlayState;
 /// `GET /overlay/feed` — the Overlay Feed: one SSE stream carrying enriched chat
 /// plus stream events, each as the M3 [`FeedEvent`] DTO.
 ///
-/// Two broadcasts are merged into a single feed: the chat signal channel (new
-/// messages + CLEARMSG deletions) and the stream-event channel (donation / sub /
-/// raid …). One source, N Overlays — the Chat Overlay reads `chatMessage`s and
-/// the Frame Overlay's Footer Bar reads `streamEvent`s off the *same* stream.
+/// Three sources are merged into a single feed: the chat signal channel (new
+/// messages + CLEARMSG deletions), the stream-event channel (donation / sub /
+/// raid …), and the now-playing *state* watch (current Spotify track). One
+/// source, one Overlay — the Coworking Overlay's chat panel reads
+/// `chatMessage`s, its Footer Bar reads `streamEvent`s, and its Now Playing
+/// widget reads `nowPlaying` off the *same* stream. The watch yields its
+/// current value first, so a fresh SSE connection immediately gets the track.
 /// Lagged frames (buffer overflow under bursts) are skipped rather than
 /// terminating the stream, so the Overlays keep rendering.
 pub async fn feed(State(state): State<OverlayState>) -> Response {
@@ -35,8 +38,21 @@ pub async fn feed(State(state): State<OverlayState>) -> Response {
         Err(_) => None,
     });
 
-    // Interleave both broadcasts onto one SSE stream as they arrive.
-    let stream = chat.merge(events).map(|feed_event| {
+    // Ambient now-playing state: WatchStream emits the current value first (so a
+    // new connection immediately sees the track), then each subsequent change.
+    // Skip the *leading* `None` (the initial "no track yet" watch value): emitting
+    // a stale `stopped` frame before any track has played would falsely tell the
+    // widget the player stopped. Once a real track has been seen, a later `None`
+    // (the track stopped) does pass through as a `now_playing_cleared` frame.
+    let now_playing = WatchStream::new(state.now_playing.clone())
+        .skip_while(|track| track.is_none())
+        .map(|track| match track {
+            Some(track) => FeedEvent::now_playing(&track),
+            None => FeedEvent::now_playing_cleared(),
+        });
+
+    // Interleave all three sources onto one SSE stream as they arrive.
+    let stream = chat.merge(events).merge(now_playing).map(|feed_event| {
         Ok::<_, Infallible>(Event::default().data(feed_event.to_json()))
     });
 
@@ -55,15 +71,11 @@ pub async fn feed(State(state): State<OverlayState>) -> Response {
         .into_response()
 }
 
-/// `GET /overlay/chat` — the Chat Overlay page (embedded `dist/index.html`).
-pub async fn chat() -> Html<&'static str> {
-    Html(assets::index_html())
-}
-
-/// `GET /overlay/frame` — the Frame Overlay page. Same embedded SPA as the Chat
-/// Overlay; the React entrypoint picks the Overlay from the URL path, so the
-/// branding frame + Footer Bar render here while chat renders at `/overlay/chat`.
-pub async fn frame() -> Html<&'static str> {
+/// `GET /overlay/coworking` — the single full-screen Coworking Overlay page
+/// (embedded `dist/index.html`). This replaces the former Chat + Frame overlays:
+/// one full-screen overlay now paints the camera frame, chat panel, and Footer
+/// Bar together, all driven off the same Overlay Feed.
+pub async fn coworking() -> Html<&'static str> {
     Html(assets::index_html())
 }
 

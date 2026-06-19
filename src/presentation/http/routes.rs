@@ -11,8 +11,7 @@ use super::OverlayState;
 pub fn router(state: OverlayState) -> Router {
     Router::new()
         .route("/overlay/feed", get(controllers::feed))
-        .route("/overlay/chat", get(controllers::chat))
-        .route("/overlay/frame", get(controllers::frame))
+        .route("/overlay/coworking", get(controllers::coworking))
         .route("/overlay/assets/*path", get(controllers::asset))
         .with_state(state)
 }

@@ -18,9 +18,9 @@ pub mod routes;
 #[cfg(test)]
 mod tests;
 
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc, watch};
 
-use crate::domain::{ChatSignal, StreamEvent};
+use crate::domain::{ChatSignal, NowPlaying, StreamEvent};
 
 /// Shared state handed to the Overlay controllers.
 #[derive(Clone)]
@@ -30,8 +30,13 @@ pub struct OverlayState {
     pub chat_tx: broadcast::Sender<ChatSignal>,
     /// Stream-event broadcast (donation / sub / raid …). The same channel the
     /// TUI subscribes to (ADR-0001 — neither renderer owns the other); the feed
-    /// fans these out so the Frame Overlay's Footer Bar can play Alerts.
+    /// fans these out so the Coworking Overlay's Footer Bar can play Alerts.
     pub event_tx: broadcast::Sender<StreamEvent>,
+    /// Ambient now-playing *state* (latest value, not an event) on a watch
+    /// channel. The feed turns each change into a `nowPlaying` FeedEvent; a new
+    /// SSE connection immediately gets the current track because watch yields
+    /// its current value first. `None` means stopped / no player.
+    pub now_playing: watch::Receiver<Option<NowPlaying>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -62,6 +67,7 @@ pub fn spawn(
     status_tx: mpsc::Sender<OverlayStatus>,
     chat_tx: broadcast::Sender<ChatSignal>,
     event_tx: broadcast::Sender<StreamEvent>,
+    now_playing_rx: watch::Receiver<Option<NowPlaying>>,
     port: u16,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
@@ -73,7 +79,7 @@ pub fn spawn(
                 None => return, // channel closed
             }
 
-            run_server(&mut cmd_rx, &status_tx, &chat_tx, &event_tx, port).await;
+            run_server(&mut cmd_rx, &status_tx, &chat_tx, &event_tx, &now_playing_rx, port).await;
         }
     })
 }
@@ -83,11 +89,13 @@ async fn run_server(
     status_tx: &mpsc::Sender<OverlayStatus>,
     chat_tx: &broadcast::Sender<ChatSignal>,
     event_tx: &broadcast::Sender<StreamEvent>,
+    now_playing_rx: &watch::Receiver<Option<NowPlaying>>,
     port: u16,
 ) {
     let app = routes::router(OverlayState {
         chat_tx: chat_tx.clone(),
         event_tx: event_tx.clone(),
+        now_playing: now_playing_rx.clone(),
     });
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
 
@@ -102,7 +110,7 @@ async fn run_server(
         }
     };
 
-    tracing::info!("overlays: http server listening on http://{addr}/overlay/chat");
+    tracing::info!("overlays: http server listening on http://{addr}/overlay/coworking");
     let _ = status_tx.send(OverlayStatus::Running { port }).await;
 
     // Graceful shutdown signal: fires when we receive a Stop command.

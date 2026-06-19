@@ -111,10 +111,25 @@ export type StreamEventDto =
   | RaidEventDto
   | ViewerCountUpdateDto;
 
+// Ambient "now playing" STATE pushed onto the feed (kind "nowPlaying"). Unlike
+// the stream events above it isn't a one-shot alert — it's the latest Spotify
+// track mirrored from a tokio::sync::watch on the Rust side. `status` of
+// "stopped" (with empty title/artist) means the player is gone or idle and the
+// widget should fall back to its placeholder.
+export interface NowPlayingDto {
+  kind: "nowPlaying";
+  title: string;
+  artist: string;
+  album: string;
+  artUrl: string | null;
+  status: "playing" | "paused" | "stopped";
+}
+
 export type FeedEventDto =
   | ChatMessageDto
   | ChatMessageDeletedDto
-  | StreamEventDto;
+  | StreamEventDto
+  | NowPlayingDto;
 
 // In dev the Vite server runs on its own origin, so the feed must point at the
 // Rust server explicitly. In the embedded build the page is same-origin, so a

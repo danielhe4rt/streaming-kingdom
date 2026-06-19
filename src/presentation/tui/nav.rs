@@ -70,8 +70,7 @@ pub enum SubItem {
 /// sidebar and panels iterate this list).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OverlayId {
-    Chat,
-    Frame,
+    Coworking,
 }
 
 /// Static description of one Overlay: its display name and OBS browser-source path.
@@ -84,18 +83,11 @@ pub struct OverlayDef {
 }
 
 impl OverlayId {
-    pub const ALL: [OverlayDef; 2] = [
-        OverlayDef {
-            id: OverlayId::Chat,
-            name: "Chat",
-            path: "/overlay/chat",
-        },
-        OverlayDef {
-            id: OverlayId::Frame,
-            name: "Frame",
-            path: "/overlay/frame",
-        },
-    ];
+    pub const ALL: [OverlayDef; 1] = [OverlayDef {
+        id: OverlayId::Coworking,
+        name: "Coworking",
+        path: "/overlay/coworking",
+    }];
 
     pub fn def(self) -> &'static OverlayDef {
         OverlayId::ALL.iter().find(|o| o.id == self).unwrap()
@@ -247,13 +239,12 @@ mod tests {
     }
 
     #[test]
-    fn overlays_sub_nav_lists_all_chat_frame_feed() {
+    fn overlays_sub_nav_lists_all_coworking_feed() {
         let items = sub_items(Section::Overlays);
         assert_eq!(items[0], SubItem::AllOverlays);
-        assert_eq!(items[1], SubItem::Overlay(OverlayId::Chat));
-        assert_eq!(items[2], SubItem::Overlay(OverlayId::Frame));
-        assert_eq!(items[3], SubItem::Feed);
-        assert_eq!(items.len(), 4);
+        assert_eq!(items[1], SubItem::Overlay(OverlayId::Coworking));
+        assert_eq!(items[2], SubItem::Feed);
+        assert_eq!(items.len(), 3);
     }
 
     #[test]
@@ -268,8 +259,8 @@ mod tests {
     fn switching_section_remembers_each_subnav() {
         let mut nav = NavState::new();
         nav.select_section(Section::Overlays);
-        nav.next_sub(); // Overlays: AllOverlays -> Chat overlay
-        assert_eq!(nav.current_sub(), SubItem::Overlay(OverlayId::Chat));
+        nav.next_sub(); // Overlays: AllOverlays -> Coworking overlay
+        assert_eq!(nav.current_sub(), SubItem::Overlay(OverlayId::Coworking));
 
         // Go to Activity, move its cursor.
         nav.select_section(Section::Activity);
@@ -279,7 +270,7 @@ mod tests {
 
         // Returning to Overlays restores its remembered sub-item.
         nav.select_section(Section::Overlays);
-        assert_eq!(nav.current_sub(), SubItem::Overlay(OverlayId::Chat));
+        assert_eq!(nav.current_sub(), SubItem::Overlay(OverlayId::Coworking));
     }
 
     #[test]
@@ -300,15 +291,14 @@ mod tests {
 
     #[test]
     fn overlay_url_is_data_driven() {
-        let def = OverlayId::Chat.def();
+        let def = OverlayId::Coworking.def();
         assert_eq!(
             overlay_url(def, 1337),
-            "http://127.0.0.1:1337/overlay/chat"
+            "http://127.0.0.1:1337/overlay/coworking"
         );
-        let frame = OverlayId::Frame.def();
         assert_eq!(
-            overlay_url(frame, 8080),
-            "http://127.0.0.1:8080/overlay/frame"
+            overlay_url(def, 8080),
+            "http://127.0.0.1:8080/overlay/coworking"
         );
     }
 }

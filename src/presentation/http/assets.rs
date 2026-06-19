@@ -7,14 +7,14 @@
 
 use include_dir::{Dir, include_dir};
 
-/// The built Chat Overlay bundle (`overlays/dist`).
+/// The built Coworking Overlay bundle (`overlays/dist`).
 static DIST: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/overlays/dist");
 
-/// The Chat Overlay HTML entrypoint (`dist/index.html`).
+/// The Coworking Overlay HTML entrypoint (`dist/index.html`).
 pub fn index_html() -> &'static str {
     DIST.get_file("index.html")
         .and_then(|f| f.contents_utf8())
-        .unwrap_or("<!doctype html><title>Chat Overlay</title><p>overlay bundle missing</p>")
+        .unwrap_or("<!doctype html><title>Coworking Overlay</title><p>overlay bundle missing</p>")
 }
 
 /// A built asset (JS/CSS) by its path relative to `dist/`, with a best-effort

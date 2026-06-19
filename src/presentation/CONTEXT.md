@@ -19,13 +19,24 @@ webhook) stays in `infrastructure/` — receiving is an adapter concern, not a v
 A browser source served by the toolkit's `http` renderer and added as a layer in OBS.
 _Avoid_: widget, browser source (use "Overlay" for the thing we serve; "browser source" is OBS's term for where it's mounted).
 
-**Chat Overlay**:
-The Overlay that renders live chat with full parity to the old StreamElements custom chat
-(coloured nick, Twitch badges, native Twitch emotes). Consumes the **Overlay Feed**.
+**Coworking Overlay**:
+The single full-screen Overlay (`/overlay/coworking`, 1920×1080) that renders the whole stream
+scene: a **Top Bar**, a **Chat Panel**, a **Camera Window** (transparent cutout), and a **Footer Bar**.
+Replaces the former separate **Chat Overlay** and **Frame Overlay** — one OBS browser source on top,
+the camera/screen source behind it showing through the Camera Window. Consumes the **Overlay Feed**.
 
-**Frame Overlay**:
-The Overlay that renders the branding frame (border, logo, socials, channel) plus a **Footer Bar**
-and a now-playing slot. Replaces the old static PNG.
+**Top Bar**:
+The Coworking Overlay's branding header (logo, social icons, channel handle).
+
+**Chat Panel**:
+The Coworking Overlay's left column. Renders live chat with full parity to the old StreamElements
+custom chat (Twitch badges, native emotes) inside a name-pill + speech-bubble style. Consumes the
+**Overlay Feed**'s chat messages.
+
+**Camera Window**:
+The Coworking Overlay's transparent right-side cutout. The toolkit renders only its frame (border,
+shadow, the yellow seam); the OBS camera or screen-capture source placed *behind* the Overlay shows
+through the hole.
 
 **Overlay Feed**:
 The single SSE stream (`GET /overlay/feed`) carrying enriched chat + stream events. **One source,
@@ -33,8 +44,9 @@ N Overlays** consume it in parallel — the chat is a shared feed, not owned by 
 _Avoid_: chat stream, websocket (it's SSE, and it carries more than chat).
 
 **Footer Bar**:
-The Frame Overlay's bottom zone. A shared slot that arbitrates between **Fun Facts** (idle) and
-**Alerts** (takeover). Alerts queue — one at a time, animate in → hold → out → back to Fun Facts.
+The Coworking Overlay's bottom zone. Hosts the now-playing slot (left) and a shared ticker slot
+(right) that arbitrates between **Fun Facts** (idle) and **Alerts** (takeover). Alerts queue — one at
+a time, animate in → hold → out → back to Fun Facts.
 
 **Fun Facts**:
 Rotating text shown in the Footer Bar when no Alert is playing.
@@ -52,21 +64,24 @@ A row in the TUI representing one integration, classified as an **Input** or an 
 ## Relationships
 
 - An **Overlay** consumes the **Overlay Feed** (SSE). Many Overlays ↔ one Feed.
-- The **Frame Overlay** owns one **Footer Bar**; the Footer Bar plays zero-or-more **Alerts**, each from one **StreamEvent**.
+- The **Coworking Overlay** owns one **Top Bar**, one **Chat Panel**, one **Camera Window**, and one **Footer Bar**; the Footer Bar plays zero-or-more **Alerts**, each from one **StreamEvent**.
 - A **Service** is exactly one of **Input** or **Output**. **Overlays** is an Output that, when toggled on, starts the `http` renderer.
 - The `tui` and `http` renderers both subscribe to the same `broadcast<StreamEvent>` and (now) `broadcast<ChatMessage>` — neither owns the other.
 
 ## Example dialogue
 
 > **Dev:** "Quando um mod apaga uma mensagem, quem some ela da tela?"
-> **Streamer:** "A **Chat Overlay** — ela ouve o delete pelo **Overlay Feed** e remove aquele nó."
+> **Streamer:** "O **Chat Panel** da **Coworking Overlay** — ele ouve o delete pelo **Overlay Feed** e remove aquele nó."
 > **Dev:** "E um sub novo durante um donation tocando no rodapé?"
 > **Streamer:** "Entra na fila do **Footer Bar**. Toca o donation, depois o sub, depois volta pro **Fun Facts**."
 
 ## Flagged ambiguities
 
 - "widget" (termo do StreamElements) foi aposentado em favor de **Overlay**.
-- "overlay" antes significava o PNG estático da moldura; agora significa qualquer página servida pelo `http`. A moldura virou a **Frame Overlay**.
+- "overlay" antes significava o PNG estático da moldura; agora significa qualquer página servida pelo `http`.
+- **Chat Overlay** e **Frame Overlay** (duas Overlays separadas, uma por OBS browser source) foram
+  fundidas numa única **Coworking Overlay** full-screen com recorte de câmera. Os termos antigos só
+  aparecem em histórico/issues; o presente é a Coworking Overlay.
 
 ## Decisions
 

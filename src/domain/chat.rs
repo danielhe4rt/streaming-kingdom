@@ -9,7 +9,7 @@ pub const DEFAULT_CHAT_COLOR: &str = "#9147ff";
 /// One ordered piece of a [`ChatMessage`] body.
 ///
 /// A body is a flat, ordered stream of plain-text runs interleaved with single
-/// native Twitch emotes. The TUI renders only the text runs; the Chat Overlay
+/// native Twitch emotes. The TUI renders only the text runs; the Coworking Overlay
 /// renders the text runs as spans and the emotes as inline `<img>`s in order.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MessageFragment {
@@ -83,7 +83,7 @@ impl ChatBadge {
 }
 
 /// One user message received from a Twitch IRC channel, enriched for parity
-/// rendering on the Chat Overlay.
+/// rendering on the Coworking Overlay.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChatMessage {
     /// Stable Twitch message id (`id` IRC tag); used as the Overlay DOM key and
@@ -260,7 +260,7 @@ impl ChatMessage {
 /// A single-message moderation signal: one chat message was deleted.
 ///
 /// Carries the stable [`ChatMessage::msg_id`] of the removed message — the same
-/// key the Chat Overlay uses as its DOM node key — so the Overlay can drop just
+/// key the Coworking Overlay uses as its DOM node key — so the Overlay can drop just
 /// that node. Produced by the IRC adapter from a Twitch `CLEARMSG`. A `CLEARCHAT`
 /// (timeout/ban clearing a user's history) is a separate, out-of-scope signal.
 #[derive(Debug, Clone, PartialEq, Eq)]

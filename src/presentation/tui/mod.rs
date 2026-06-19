@@ -20,10 +20,10 @@ use std::time::Duration;
 use crossterm::event::{self, Event};
 use ratatui::Terminal;
 use ratatui::prelude::*;
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc, watch};
 
 use crate::application::{AppState, EventLogConfig};
-use crate::domain::{AppEvent, ChatSignal, FeatureCommand, StreamEvent};
+use crate::domain::{AppEvent, ChatSignal, FeatureCommand, NowPlaying, StreamEvent};
 use crate::infrastructure::hyprland::{PrivacyCommand, PrivacyStatus};
 use crate::infrastructure::livepix::{LivepixCommand, LivepixStatus};
 use crate::infrastructure::waybar;
@@ -80,6 +80,7 @@ pub async fn run(
     twitch_channel: &str,
     tts_available: bool,
     overlays_port: u16,
+    mut now_playing_rx: watch::Receiver<Option<NowPlaying>>,
 ) -> io::Result<()> {
     let mut terminal = init_terminal()?;
     let mut tui = TuiState::new(event_log_config, twitch_channel, tts_available, overlays_port);
@@ -123,6 +124,7 @@ pub async fn run(
         &mut hyprland_rx,
         &mut twitch_event_rx,
         &mut chat_rx,
+        &mut now_playing_rx,
     )
     .await;
 
@@ -158,6 +160,7 @@ async fn event_loop(
     hyprland_rx: &mut mpsc::Receiver<AppEvent>,
     twitch_event_rx: &mut mpsc::Receiver<AppEvent>,
     chat_rx: &mut broadcast::Receiver<ChatSignal>,
+    now_playing_rx: &mut watch::Receiver<Option<NowPlaying>>,
 ) -> io::Result<()> {
     let mut prev = drain::ToggleSnapshot::capture(app);
 
@@ -181,6 +184,7 @@ async fn event_loop(
         drain::hyprland_events(app, tui, hyprland_rx);
         drain::twitch_events(app, tui, twitch_event_rx);
         drain::chat_signals(app, tui, chat_rx);
+        drain::now_playing(tui, now_playing_rx);
 
         // Apply queued feature commands, then react to any toggle changes.
         app.process_pending_commands();

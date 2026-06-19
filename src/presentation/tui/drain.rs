@@ -37,6 +37,20 @@ pub fn stream_events(
 }
 
 // ---------------------------------------------------------------------------
+// Now-playing (watch<Option<NowPlaying>>) — ambient state, latest-value-wins
+// ---------------------------------------------------------------------------
+
+/// Refresh the cached now-playing track from the media-player observer's
+/// `watch` channel. Unlike the broadcast/mpsc drains this is not a queue: we
+/// just snapshot the latest value each tick (cheap clone, deduped upstream).
+pub fn now_playing(
+    tui: &mut TuiState,
+    rx: &mut tokio::sync::watch::Receiver<Option<crate::domain::NowPlaying>>,
+) {
+    tui.now_playing = rx.borrow().clone();
+}
+
+// ---------------------------------------------------------------------------
 // Privacy monitor status
 // ---------------------------------------------------------------------------
 
@@ -164,7 +178,7 @@ pub fn overlays_status(
 
         match status {
             OverlayStatus::Running { port } => app.log_event(AppEvent::Info(format!(
-                "Overlays serving on http://127.0.0.1:{port}/overlay/chat"
+                "Overlays serving on http://127.0.0.1:{port}/overlay/coworking"
             ))),
             OverlayStatus::Stopped => app.log_event(AppEvent::Info("Overlays stopped".into())),
             OverlayStatus::Error(msg) => app.log_event(AppEvent::Error(format!("Overlays: {msg}"))),

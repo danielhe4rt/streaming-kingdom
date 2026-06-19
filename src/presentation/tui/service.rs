@@ -28,6 +28,7 @@ pub enum ServiceKind {
 pub enum ServiceId {
     TwitchEventSub,
     TwitchChat,
+    Spotify,
     Livepix,
     Hyprland,
     Privacy,
@@ -60,6 +61,14 @@ pub const REGISTRY: &[ServiceDef] = &[
     ServiceDef {
         id: ServiceId::TwitchChat,
         name: "Twitch Chat",
+        kind: ServiceKind::Input,
+        toggleable: false,
+    },
+    ServiceDef {
+        // Now-playing observer (MPRIS / playerctl). Read-only ambient state —
+        // its live track is shown in the detail pane, never toggled here.
+        id: ServiceId::Spotify,
+        name: "Spotify",
         kind: ServiceKind::Input,
         toggleable: false,
     },
@@ -116,7 +125,7 @@ pub fn outputs() -> impl Iterator<Item = &'static ServiceDef> {
 /// considered "on" once configured — their live status is shown separately).
 pub fn is_enabled(id: ServiceId, app: &AppState) -> bool {
     match id {
-        ServiceId::TwitchEventSub | ServiceId::TwitchChat => true,
+        ServiceId::TwitchEventSub | ServiceId::TwitchChat | ServiceId::Spotify => true,
         ServiceId::Livepix => app.livepix_enabled,
         ServiceId::Hyprland => app.alerts_enabled,
         ServiceId::Privacy => app.privacy_enabled,
@@ -157,7 +166,7 @@ pub fn toggle_command(id: ServiceId, app: &AppState) -> Option<FeatureCommand> {
             FeatureCommand::EnableOverlays
         }),
         // Read-only Inputs have no toggle.
-        ServiceId::TwitchEventSub | ServiceId::TwitchChat => None,
+        ServiceId::TwitchEventSub | ServiceId::TwitchChat | ServiceId::Spotify => None,
     }
 }
 
@@ -178,8 +187,8 @@ mod tests {
     fn registry_is_grouped_inputs_then_outputs() {
         assert_eq!(
             inputs().count(),
-            5,
-            "EventSub, Chat, Livepix, Hyprland, Privacy"
+            6,
+            "EventSub, Chat, Spotify, Livepix, Hyprland, Privacy"
         );
         assert_eq!(outputs().count(), 2, "Waybar, Overlays");
 

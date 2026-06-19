@@ -1,17 +1,18 @@
 //! Axum integration test for the Overlay `http` renderer.
 //!
 //! Boots the real router on an ephemeral port, then asserts the tracer-bullet
-//! contract: `GET /overlay/chat` serves the embedded Chat Overlay page and
-//! `GET /overlay/feed` streams a broadcast chat message as the M3 Feed DTO.
+//! contract: `GET /overlay/coworking` serves the embedded Coworking Overlay page
+//! and `GET /overlay/feed` streams a broadcast chat message as the M3 Feed DTO.
 
 use std::time::Duration;
 
 use tokio::io::AsyncReadExt;
 use tokio::net::TcpListener;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, watch};
 
 use crate::domain::{
-    ChatBadge, ChatMessage, ChatMessageDeleted, ChatSignal, EmoteSpan, StreamEvent,
+    ChatBadge, ChatMessage, ChatMessageDeleted, ChatSignal, EmoteSpan, NowPlaying, PlaybackStatus,
+    StreamEvent,
 };
 
 use super::{routes, OverlayState};
@@ -20,14 +21,17 @@ struct TestServer {
     addr: std::net::SocketAddr,
     chat_tx: broadcast::Sender<ChatSignal>,
     event_tx: broadcast::Sender<StreamEvent>,
+    now_playing_tx: watch::Sender<Option<NowPlaying>>,
 }
 
 async fn boot_server() -> TestServer {
     let (chat_tx, _) = broadcast::channel(16);
     let (event_tx, _) = broadcast::channel(16);
+    let (now_playing_tx, now_playing_rx) = watch::channel(None);
     let app = routes::router(OverlayState {
         chat_tx: chat_tx.clone(),
         event_tx: event_tx.clone(),
+        now_playing: now_playing_rx,
     });
 
     let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
@@ -43,20 +47,21 @@ async fn boot_server() -> TestServer {
         addr,
         chat_tx,
         event_tx,
+        now_playing_tx,
     }
 }
 
 #[tokio::test]
-async fn chat_overlay_serves_embedded_page() {
+async fn coworking_overlay_serves_embedded_page() {
     let server = boot_server().await;
     let addr = server.addr;
 
-    let body = reqwest::get(format!("http://{addr}/overlay/chat"))
-        .await
-        .unwrap()
-        .text()
+    let response = reqwest::get(format!("http://{addr}/overlay/coworking"))
         .await
         .unwrap();
+    assert_eq!(response.status(), 200, "coworking overlay should return 200");
+
+    let body = response.text().await.unwrap();
 
     assert!(body.contains("<div id=\"root\">"), "page should mount React root");
     assert!(
@@ -229,28 +234,6 @@ async fn feed_streams_single_message_delete_as_dto() {
 }
 
 #[tokio::test]
-async fn frame_overlay_serves_embedded_page() {
-    let server = boot_server().await;
-    let addr = server.addr;
-
-    // The Frame Overlay reuses the same embedded SPA as the Chat Overlay; the
-    // React entrypoint switches on the URL path. So the page mounts the same
-    // React root and asset bundle, just at /overlay/frame.
-    let body = reqwest::get(format!("http://{addr}/overlay/frame"))
-        .await
-        .unwrap()
-        .text()
-        .await
-        .unwrap();
-
-    assert!(body.contains("<div id=\"root\">"), "page should mount React root");
-    assert!(
-        body.contains("/overlay/assets/"),
-        "page should reference the embedded asset bundle, got: {body}"
-    );
-}
-
-#[tokio::test]
 async fn feed_streams_stream_event_as_dto() {
     let server = boot_server().await;
     let (addr, event_tx) = (server.addr, server.event_tx);
@@ -265,7 +248,7 @@ async fn feed_streams_stream_event_as_dto() {
     // publish, otherwise the broadcast drops the event with no receivers.
     tokio::time::sleep(Duration::from_millis(50)).await;
 
-    // A donation fires — the Frame Overlay's Footer Bar turns this into an Alert.
+    // A donation fires — the Coworking Overlay's Footer Bar turns this into an Alert.
     event_tx
         .send(StreamEvent::Donation {
             username: "danielhe4rt".into(),
@@ -298,4 +281,60 @@ async fn feed_streams_stream_event_as_dto() {
     assert!(acc.contains("\"type\":\"donation\""), "got: {acc}");
     assert!(acc.contains("\"username\":\"danielhe4rt\""), "got: {acc}");
     assert!(acc.contains("\"amountCents\":500"), "got: {acc}");
+}
+
+#[tokio::test]
+async fn feed_streams_now_playing_as_dto() {
+    let server = boot_server().await;
+    let (addr, now_playing_tx) = (server.addr, server.now_playing_tx);
+
+    let mut stream = tokio::net::TcpStream::connect(addr).await.unwrap();
+    let request = "GET /overlay/feed HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\n\r\n";
+    tokio::io::AsyncWriteExt::write_all(&mut stream, request.as_bytes())
+        .await
+        .unwrap();
+
+    // Let the SSE handler subscribe to the watch before we push a new track.
+    // (Unlike a broadcast, the watch retains the latest value — but a fresh push
+    // exercises the change path the observer drives.)
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    // A new Spotify track starts playing — the watch carries it as ambient state,
+    // and the feed turns it into a `nowPlaying` DTO for the Now Playing widget.
+    now_playing_tx
+        .send(Some(NowPlaying {
+            title: "Money".into(),
+            artist: "Pink Floyd".into(),
+            album: "The Dark Side of the Moon".into(),
+            art_url: Some("https://i.scdn.co/image/abc".into()),
+            status: PlaybackStatus::Playing,
+        }))
+        .unwrap();
+
+    let mut buf = vec![0u8; 4096];
+    let mut acc = String::new();
+    let read = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let n = stream.read(&mut buf).await.unwrap();
+            if n == 0 {
+                break;
+            }
+            acc.push_str(&String::from_utf8_lossy(&buf[..n]));
+            if acc.contains("nowPlaying") {
+                break;
+            }
+        }
+    })
+    .await;
+
+    assert!(read.is_ok(), "timed out waiting for SSE frame; got: {acc}");
+    assert!(acc.contains("data:"), "expected an SSE data frame, got: {acc}");
+    assert!(acc.contains("\"kind\":\"nowPlaying\""), "got: {acc}");
+    assert!(acc.contains("\"title\":\"Money\""), "got: {acc}");
+    assert!(acc.contains("\"artist\":\"Pink Floyd\""), "got: {acc}");
+    assert!(acc.contains("\"status\":\"playing\""), "got: {acc}");
+    assert!(
+        acc.contains("\"artUrl\":\"https://i.scdn.co/image/abc\""),
+        "got: {acc}"
+    );
 }
