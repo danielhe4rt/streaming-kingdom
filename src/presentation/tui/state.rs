@@ -67,6 +67,16 @@ pub struct OverlaysIntegrationStatus {
     pub last_error: Option<String>,
 }
 
+/// Live status of the Discord voice-roster Output, populated from the
+/// [`DiscordStatus`](crate::infrastructure::discord::DiscordStatus) channel.
+/// Three states: stopped / running / error.
+#[derive(Debug, Default)]
+pub struct DiscordIntegrationStatus {
+    pub running: bool,
+    pub channel: Option<String>,
+    pub last_error: Option<String>,
+}
+
 // ---------------------------------------------------------------------------
 // Chat & highlight buffers
 // ---------------------------------------------------------------------------
@@ -106,6 +116,7 @@ pub struct TuiState {
     pub privacy: PrivacyIntegrationStatus,
     pub hyprland: HyprlandIntegrationStatus,
     pub overlays: OverlaysIntegrationStatus,
+    pub discord: DiscordIntegrationStatus,
 
     // Chat ring buffer (separate from event log)
     pub chat_messages: VecDeque<ChatEntry>,
@@ -161,6 +172,7 @@ impl TuiState {
                 port: overlays_port,
                 ..Default::default()
             },
+            discord: DiscordIntegrationStatus::default(),
             chat_messages: VecDeque::with_capacity(CHAT_BUFFER_CAPACITY),
             highlights: VecDeque::with_capacity(HIGHLIGHT_BUFFER_CAPACITY),
             filter_stream: event_log_config.show_stream,

@@ -28,10 +28,12 @@ async fn boot_server() -> TestServer {
     let (chat_tx, _) = broadcast::channel(16);
     let (event_tx, _) = broadcast::channel(16);
     let (now_playing_tx, now_playing_rx) = watch::channel(None);
+    let (voice_roster_tx, _voice_roster_rx) = watch::channel(None);
     let app = routes::router(OverlayState {
         chat_tx: chat_tx.clone(),
         event_tx: event_tx.clone(),
         now_playing: now_playing_rx,
+        voice_roster_tx,
     });
 
     let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();

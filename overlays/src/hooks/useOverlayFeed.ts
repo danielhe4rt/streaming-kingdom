@@ -18,6 +18,7 @@ import {
   type FeedEventDto,
   type NowPlayingDto,
   type StreamEventDto,
+  type VoiceRosterDto,
 } from "../feed";
 
 export interface OverlayFeedHandlers {
@@ -25,6 +26,7 @@ export interface OverlayFeedHandlers {
   onChatDeleted(msgId: string): void;
   onStreamEvent(dto: StreamEventDto): void;
   onNowPlaying(dto: NowPlayingDto): void;
+  onVoiceRoster(dto: VoiceRosterDto): void;
 }
 
 export function useOverlayFeed(handlers: OverlayFeedHandlers): void {
@@ -58,6 +60,9 @@ export function useOverlayFeed(handlers: OverlayFeedHandlers): void {
           break;
         case "nowPlaying":
           h.onNowPlaying(dto);
+          break;
+        case "voiceRoster":
+          h.onVoiceRoster(dto);
           break;
       }
     };

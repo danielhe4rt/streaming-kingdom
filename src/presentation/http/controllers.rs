@@ -51,10 +51,23 @@ pub async fn feed(State(state): State<OverlayState>) -> Response {
             None => FeedEvent::now_playing_cleared(),
         });
 
-    // Interleave all three sources onto one SSE stream as they arrive.
-    let stream = chat.merge(events).merge(now_playing).map(|feed_event| {
-        Ok::<_, Infallible>(Event::default().data(feed_event.to_json()))
-    });
+    // Ambient voice-roster state: same WatchStream pattern as now-playing. Skip
+    // the leading `None` (the watch is seeded with `None`); once a real roster has
+    // been seen, a later `None` (left voice / Discord closed) passes through as a
+    // cleared roster (`channelId: null`, `members: []`) so the widget empties.
+    let voice_roster = WatchStream::new(state.voice_roster_tx.subscribe())
+        .skip_while(|roster| roster.is_none())
+        .map(|roster| match roster {
+            Some(roster) => FeedEvent::voice_roster(&roster),
+            None => FeedEvent::voice_roster(&crate::domain::VoiceRoster::default()),
+        });
+
+    // Interleave all sources onto one SSE stream as they arrive.
+    let stream = chat
+        .merge(events)
+        .merge(now_playing)
+        .merge(voice_roster)
+        .map(|feed_event| Ok::<_, Infallible>(Event::default().data(feed_event.to_json())));
 
     let sse = Sse::new(stream).keep_alive(
         KeepAlive::new()

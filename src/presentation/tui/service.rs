@@ -34,6 +34,7 @@ pub enum ServiceId {
     Privacy,
     Waybar,
     Overlays,
+    Discord,
 }
 
 /// The static description of a Service — its identity and classification. The
@@ -102,6 +103,12 @@ pub const REGISTRY: &[ServiceDef] = &[
         kind: ServiceKind::Output,
         toggleable: true,
     },
+    ServiceDef {
+        id: ServiceId::Discord,
+        name: "Discord",
+        kind: ServiceKind::Output,
+        toggleable: true,
+    },
 ];
 
 /// The Service registry as a slice — the data-driven source for nav + panes.
@@ -131,6 +138,7 @@ pub fn is_enabled(id: ServiceId, app: &AppState) -> bool {
         ServiceId::Privacy => app.privacy_enabled,
         ServiceId::Waybar => app.waybar_enabled,
         ServiceId::Overlays => app.overlays_enabled,
+        ServiceId::Discord => app.discord_enabled,
     }
 }
 
@@ -165,6 +173,11 @@ pub fn toggle_command(id: ServiceId, app: &AppState) -> Option<FeatureCommand> {
         } else {
             FeatureCommand::EnableOverlays
         }),
+        ServiceId::Discord => Some(if app.discord_enabled {
+            FeatureCommand::DisableDiscord
+        } else {
+            FeatureCommand::EnableDiscord
+        }),
         // Read-only Inputs have no toggle.
         ServiceId::TwitchEventSub | ServiceId::TwitchChat | ServiceId::Spotify => None,
     }
@@ -190,7 +203,7 @@ mod tests {
             6,
             "EventSub, Chat, Spotify, Livepix, Hyprland, Privacy"
         );
-        assert_eq!(outputs().count(), 2, "Waybar, Overlays");
+        assert_eq!(outputs().count(), 3, "Waybar, Overlays, Discord");
 
         // Every Input is classified Input, every Output is classified Output.
         assert!(inputs().all(|s| s.kind == ServiceKind::Input));

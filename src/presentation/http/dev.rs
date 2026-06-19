@@ -74,6 +74,18 @@ pub async fn chat(Query(q): Query<ChatQuery>, State(state): State<OverlayState>)
     (StatusCode::OK, "fired chat").into_response()
 }
 
+/// `GET /overlay/dev/event/voiceRoster` — publish one synthetic voice-roster
+/// snapshot onto the same watch channel the Discord adapter feeds, so the
+/// Overlay Feed fans it to an open overlay exactly like a real roster (a couple
+/// of members, one speaking). Lets the Voice Roster widget be built without a
+/// running Discord client. Routed separately from the generic stream-event
+/// `event` handler because the roster rides a watch channel, not `event_tx`.
+pub async fn voice_roster(State(state): State<OverlayState>) -> Response {
+    let roster = synthetic::voice_roster(synthetic::next_seq());
+    let _ = state.voice_roster_tx.send(Some(roster));
+    (StatusCode::OK, "fired voiceRoster").into_response()
+}
+
 /// `GET /overlay/dev` — the control panel: buttons that fetch the emit routes.
 pub async fn panel() -> Html<&'static str> {
     Html(PANEL_HTML)
@@ -123,6 +135,10 @@ const PANEL_HTML: &str = r##"<!doctype html>
     <button id="chatBtn" class="accent">💬 Enviar chat</button>
   </div>
 
+  <div class="grid">
+    <button id="voiceBtn">🎙 Voice roster</button>
+  </div>
+
   <div id="log">pronto.</div>
 
 <script>
@@ -138,6 +154,11 @@ const PANEL_HTML: &str = r##"<!doctype html>
     const t = document.getElementById("chatText").value.trim();
     const url = "/overlay/dev/chat" + (t ? "?text=" + encodeURIComponent(t) : "");
     try { const r = await fetch(url); log(await r.text()); } catch (e) { log("erro: " + e); }
+  });
+
+  document.getElementById("voiceBtn").addEventListener("click", async () => {
+    try { const r = await fetch("/overlay/dev/event/voiceRoster"); log(await r.text()); }
+    catch (e) { log("erro: " + e); }
   });
 
   document.getElementById("burst").addEventListener("click", async () => {

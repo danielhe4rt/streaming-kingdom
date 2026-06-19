@@ -10,12 +10,16 @@ use tokio::sync::{broadcast, mpsc};
 
 use crate::application::AppState;
 use crate::domain::{AppEvent, ChatSignal, StreamEvent};
+use crate::infrastructure::discord::{DiscordCommand, DiscordStatus};
 use crate::infrastructure::hyprland::{PrivacyCommand, PrivacyStatus};
 use crate::infrastructure::livepix::{LivepixCommand, LivepixStatus};
 use crate::infrastructure::waybar;
 use crate::presentation::http::{OverlayCommand, OverlayStatus};
 
-use super::state::{ChatEntry, LivepixIntegrationStatus, PrivacyIntegrationStatus, TuiState};
+use super::state::{
+    ChatEntry, DiscordIntegrationStatus, LivepixIntegrationStatus, PrivacyIntegrationStatus,
+    TuiState,
+};
 use super::theme::maybe_highlight;
 
 // ---------------------------------------------------------------------------
@@ -187,6 +191,50 @@ pub fn overlays_status(
 }
 
 // ---------------------------------------------------------------------------
+// Discord voice-roster adapter status (four-state lifecycle)
+// ---------------------------------------------------------------------------
+
+pub fn discord_status(
+    app: &mut AppState,
+    tui: &mut TuiState,
+    rx: &mut mpsc::Receiver<DiscordStatus>,
+) {
+    while let Ok(status) = rx.try_recv() {
+        match &status {
+            DiscordStatus::Stopped => {
+                tui.discord.running = false;
+                tui.discord.channel = None;
+            }
+            DiscordStatus::Running { channel } => {
+                tui.discord.running = true;
+                tui.discord.channel = channel.clone();
+                tui.discord.last_error = None;
+            }
+            DiscordStatus::Activity(_) => {} // log-only; no row-state change
+            DiscordStatus::Error(msg) => {
+                tui.discord.running = false;
+                tui.discord.last_error = Some(msg.clone());
+                app.status_message = Some(format!("Discord: {msg}"));
+                app.discord_enabled = false;
+            }
+        }
+
+        match status {
+            DiscordStatus::Stopped => app.log_event(AppEvent::Info("Discord stopped".into())),
+            DiscordStatus::Activity(msg) => app.log_event(AppEvent::Info(format!("Discord: {msg}"))),
+            DiscordStatus::Running { channel } => {
+                let msg = match channel.as_deref() {
+                    Some(c) => format!("Discord connected · #{c}"),
+                    None => "Discord bridge active (injecting into Vesktop)".into(),
+                };
+                app.log_event(AppEvent::Info(msg))
+            }
+            DiscordStatus::Error(msg) => app.log_event(AppEvent::Error(format!("Discord: {msg}"))),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Hyprland events
 // ---------------------------------------------------------------------------
 
@@ -278,6 +326,7 @@ pub struct ToggleSnapshot {
     privacy: bool,
     livepix: bool,
     overlays: bool,
+    discord: bool,
 }
 
 impl ToggleSnapshot {
@@ -287,6 +336,7 @@ impl ToggleSnapshot {
             privacy: app.privacy_enabled,
             livepix: app.livepix_enabled,
             overlays: app.overlays_enabled,
+            discord: app.discord_enabled,
         }
     }
 }
@@ -301,6 +351,7 @@ pub async fn react_to_toggles(
     privacy_cmd_tx: &mpsc::Sender<PrivacyCommand>,
     livepix_cmd_tx: &mpsc::Sender<LivepixCommand>,
     overlays_cmd_tx: &mpsc::Sender<OverlayCommand>,
+    discord_cmd_tx: &mpsc::Sender<DiscordCommand>,
 ) -> ToggleSnapshot {
     if app.waybar_enabled != prev.waybar {
         react_waybar(app, waybar_output).await;
@@ -333,6 +384,16 @@ pub async fn react_to_toggles(
             OverlayCommand::Stop
         };
         let _ = overlays_cmd_tx.send(cmd).await;
+    }
+
+    if app.discord_enabled != prev.discord {
+        let cmd = if app.discord_enabled {
+            DiscordCommand::Start
+        } else {
+            tui.discord = DiscordIntegrationStatus::default();
+            DiscordCommand::Stop
+        };
+        let _ = discord_cmd_tx.send(cmd).await;
     }
 
     ToggleSnapshot::capture(app)

@@ -1,3 +1,4 @@
+pub mod discord;
 pub mod elevenlabs;
 pub mod hyprland;
 pub mod livepix;

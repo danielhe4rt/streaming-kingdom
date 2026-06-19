@@ -4,10 +4,13 @@
 // Headless/presentational: takes only a `channel` handle and paints the
 // top-left branding strip. Carries its own absolute coordinates from the
 // reference so the Stage just lists it. The gradient square pulses (logoPulse)
-// and holds the He4rt "//" logo; a row of social glyphs + the channel handle
+// and holds the He4rt circuit logo (heart mark with a LED tracing its outline);
+// a row of social glyphs + the channel handle
 // sits to its right. The yellow corner notch + right-edge notch are the exact
 // CSS triangles from the reference (border tricks, no SVG).
 // ---------------------------------------------------------------------------
+
+import He4rtLogo from "./He4rtLogo";
 
 export interface TopBarProps {
   channel: string;
@@ -24,19 +27,8 @@ export default function TopBar({ channel }: TopBarProps) {
         <div
           className="relative flex h-[100px] w-[100px] flex-none items-center justify-center bg-[linear-gradient(150deg,var(--color-brand-bright)_0%,var(--color-brand-deep)_100%)] animate-[logoPulse_3.4s_ease-in-out_infinite]"
         >
-          {/* He4rt "//" mark: two rounded bars + heart, skewed for the slash look */}
-          <svg
-            viewBox="0 0 120 120"
-            width="58"
-            height="58"
-            style={{ transform: "skewX(-8deg)" }}
-          >
-            <g fill="#fff">
-              <rect x="22" y="14" width="20" height="92" rx="9" />
-              <rect x="80" y="14" width="20" height="92" rx="9" />
-              <path d="M61 80C42 65 42 47 55 47c4 0 6 3 6 6 0-3 2-6 6-6 13 0 13 18-6 33Z" />
-            </g>
-          </svg>
+          {/* He4rt circuit mark: heart outline with a white LED tracing it */}
+          <He4rtLogo tone="light" className="h-[74px] w-[74px]" />
           {/* yellow corner notch triangle at the square's bottom-left */}
           <div className="absolute left-0 bottom-[-12px] h-0 w-0 border-l-[12px] border-l-yellow border-b-[12px] border-b-transparent" />
         </div>

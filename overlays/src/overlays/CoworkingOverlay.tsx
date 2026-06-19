@@ -18,6 +18,7 @@ import { useChatMessages } from "../hooks/useChatMessages";
 import { useFooterBar } from "../hooks/useFooterBar";
 import { useNowPlaying } from "../hooks/useNowPlaying";
 import { useOverlayFeed } from "../hooks/useOverlayFeed";
+import { useVoiceRoster } from "../hooks/useVoiceRoster";
 import { toChatBubble } from "../lib/chat";
 import { toEventAlert } from "../lib/eventAlert";
 import { FUN_FACTS, FUN_FACT_HIGHLIGHTS } from "../lib/funFacts";
@@ -29,6 +30,7 @@ import FooterBar from "../ui/footer/FooterBar";
 import NowPlaying from "../ui/footer/NowPlaying";
 import FunFactsTicker from "../ui/footer/FunFactsTicker";
 import EventAlert from "../ui/footer/EventAlert";
+import VoiceRoster from "../ui/voice/VoiceRoster";
 
 // How long an Alert holds the footer bar before yielding back to Fun Facts.
 // Mirrors the reference design / old FrameOverlay ALERT_DURATION_MS.
@@ -38,15 +40,17 @@ export default function CoworkingOverlay() {
   const chat = useChatMessages();
   const footer = useFooterBar();
   const np = useNowPlaying();
+  const voice = useVoiceRoster();
 
   // Single SSE seam: fan the tagged-union feed into the chat list, the
-  // footer-bar arbitration, and the now-playing widget. ui/ never touches the
-  // network.
+  // footer-bar arbitration, the now-playing widget, and the voice roster. ui/
+  // never touches the network.
   useOverlayFeed({
     onChatMessage: chat.push,
     onChatDeleted: chat.remove,
     onStreamEvent: footer.pushEvent,
     onNowPlaying: np.onDto,
+    onVoiceRoster: voice.onDto,
   });
 
   // Alert hold timer: whenever an Alert becomes current, hold it for
@@ -78,7 +82,12 @@ export default function CoworkingOverlay() {
         ))}
       </ChatPanel>
 
-      
+      {/* Discord voice roster: pinned just above the footer on the right, under
+          the camera cutout. Self-contained — renders nothing when not in a
+          voice channel, so the slot collapses cleanly. */}
+      <div className="absolute right-[40px] bottom-[140px]">
+        <VoiceRoster roster={voice.roster} />
+      </div>
 
       <FooterBar>
         <NowPlaying track={np.track} />

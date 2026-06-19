@@ -43,7 +43,8 @@ pub fn draw_all(frame: &mut Frame, area: Rect, app: &AppState, tui: &TuiState) {
         + tui.livepix.running as u32
         + tui.hyprland.listening as u32
         + tui.privacy.running as u32;
-    let outputs_on = app.waybar_enabled as u32 + tui.overlays.running as u32;
+    let outputs_on =
+        app.waybar_enabled as u32 + tui.overlays.running as u32 + tui.discord.running as u32;
     lines.push(Line::from(""));
     lines.push(Line::from(vec![
         Span::styled("  Inputs ", Style::default().fg(COLOR_MUTED)),
@@ -53,7 +54,7 @@ pub fn draw_all(frame: &mut Frame, area: Rect, app: &AppState, tui: &TuiState) {
         ),
         Span::styled("   Outputs ", Style::default().fg(COLOR_MUTED)),
         Span::styled(
-            format!("{outputs_on}/2 active"),
+            format!("{outputs_on}/3 active"),
             Style::default().fg(COLOR_CONNECTED),
         ),
         Span::styled(

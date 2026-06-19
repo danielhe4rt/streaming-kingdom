@@ -15,6 +15,7 @@ pub fn router(state: OverlayState) -> Router {
         .route("/overlay/coworking", get(controllers::coworking))
         // Dev-only fake event emitter (localhost). See http::dev.
         .route("/overlay/dev", get(dev::panel))
+        .route("/overlay/dev/event/voiceRoster", get(dev::voice_roster))
         .route("/overlay/dev/event/:kind", get(dev::event))
         .route("/overlay/dev/chat", get(dev::chat))
         .route("/overlay/assets/*path", get(controllers::asset))

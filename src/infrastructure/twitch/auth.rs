@@ -39,9 +39,13 @@ struct CallbackParams {
     error_description: Option<String>,
 }
 
+/// Shared one-shot slot the OAuth callback handler uses to hand the result
+/// (`Ok(code)` or `Err(message)`) back to the awaiting authorize flow.
+type CallbackSlot = Arc<Mutex<Option<oneshot::Sender<Result<String, String>>>>>;
+
 #[derive(Clone)]
 struct CallbackState {
-    tx: Arc<Mutex<Option<oneshot::Sender<Result<String, String>>>>>,
+    tx: CallbackSlot,
 }
 
 /// Validate an existing OAuth token against Twitch's validate endpoint.

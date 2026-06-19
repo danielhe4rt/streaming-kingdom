@@ -125,15 +125,40 @@ export interface NowPlayingDto {
   status: "playing" | "paused" | "stopped";
 }
 
+// Ambient Discord voice-channel roster STATE pushed onto the feed (kind
+// "voiceRoster"). Like nowPlaying it is the latest value mirrored from a
+// tokio::sync::watch on the Rust side, not a one-shot alert. A null `channelId`
+// (with empty `members`) means the streamer left voice / Discord disconnected,
+// and the widget should render nothing. Field names are camelCase, matching the
+// Rust serde DTO exactly; `avatarUrl` is nullable (Option<String>).
+export interface VoiceMemberDto {
+  userId: string;
+  displayName: string;
+  avatarUrl: string | null;
+  speaking: boolean;
+  selfMute: boolean;
+  selfDeaf: boolean;
+  serverMute: boolean;
+  serverDeaf: boolean;
+}
+
+export interface VoiceRosterDto {
+  kind: "voiceRoster";
+  channelId: string | null;
+  channelName: string | null;
+  members: VoiceMemberDto[];
+}
+
 export type FeedEventDto =
   | ChatMessageDto
   | ChatMessageDeletedDto
   | StreamEventDto
-  | NowPlayingDto;
+  | NowPlayingDto
+  | VoiceRosterDto;
 
 // In dev the Vite server runs on its own origin, so the feed must point at the
 // Rust server explicitly. In the embedded build the page is same-origin, so a
 // relative path is correct.
 export const FEED_URL = import.meta.env.DEV
-  ? "http://127.0.0.1:1337/overlay/feed"
+  ? "http://127.0.0.1:1111/overlay/feed"
   : "/overlay/feed";

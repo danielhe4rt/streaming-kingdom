@@ -131,6 +131,11 @@ fn fire_test_event(app: &AppState, tui: &mut TuiState) {
                 .now_playing_tx
                 .send(Some(synthetic::now_playing(synthetic::next_seq())));
         }
+        SyntheticKind::VoiceRoster => {
+            let _ = app
+                .voice_roster_tx
+                .send(Some(synthetic::voice_roster(synthetic::next_seq())));
+        }
         other => {
             if let Some(event) = synthetic::stream_event(other, synthetic::next_seq()) {
                 let _ = app.event_tx.send(event);

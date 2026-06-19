@@ -14,4 +14,6 @@ pub enum FeatureCommand {
     DisableLivepix,
     EnableOverlays,
     DisableOverlays,
+    EnableDiscord,
+    DisableDiscord,
 }

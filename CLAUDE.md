@@ -109,5 +109,7 @@ Robust prose docs live in `docs/arch/`, one numbered file per domain module and 
 | `src/infrastructure/obs/`            | `docs/arch/10-infra-obs.md`        |
 | `src/infrastructure/waybar/`         | `docs/arch/11-infra-waybar.md`     |
 | `src/infrastructure/media_player/`   | `docs/arch/13-infra-media-player.md` |
+| `src/infrastructure/discord/`        | `docs/arch/14-infra-discord.md`    |
+| `src/domain/voice.rs`                | `docs/arch/15-domain-voice.md`     |
 
 For **infrastructure** docs especially: whenever the external service usage changes (new endpoint, scope, env var, protocol, crate), reflect it in the matching doc. Each doc carries a "Keep in sync" header pointing back here. When you add a new domain module or infra service, add a numbered doc and a row above.

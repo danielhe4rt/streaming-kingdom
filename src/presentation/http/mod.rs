@@ -8,7 +8,8 @@
 //! As of the nav-shell reorg (#7) the server is no longer always-on at boot.
 //! It is a proper **Output**: the TUI toggles it Start/Stop via the same
 //! `spawn()` + `Start`/`Stop` command pattern as Livepix and Privacy. The
-//! port comes from `[overlays.port]` in config.toml (default 1337).
+//! port comes from `[overlays.port]` in config.toml (default 1111; 1337 is left
+//! free for arRPC's bridge).
 
 pub mod assets;
 pub mod controllers;
@@ -21,7 +22,7 @@ mod tests;
 
 use tokio::sync::{broadcast, mpsc, watch};
 
-use crate::domain::{ChatSignal, NowPlaying, StreamEvent};
+use crate::domain::{ChatSignal, NowPlaying, StreamEvent, VoiceRoster};
 
 /// Shared state handed to the Overlay controllers.
 #[derive(Clone)]
@@ -38,6 +39,13 @@ pub struct OverlayState {
     /// SSE connection immediately gets the current track because watch yields
     /// its current value first. `None` means stopped / no player.
     pub now_playing: watch::Receiver<Option<NowPlaying>>,
+    /// Ambient voice-roster *state* (latest value, not an event) on a watch
+    /// channel. We hold the *sender* (not just a receiver) so `feed()` can
+    /// `subscribe()` per SSE connection (each gets the current roster first,
+    /// watch yields its current value), and the `/overlay/dev` route can publish
+    /// a synthetic snapshot straight onto the same channel the Discord adapter
+    /// feeds. `None` means no active voice channel.
+    pub voice_roster_tx: watch::Sender<Option<VoiceRoster>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -69,6 +77,7 @@ pub fn spawn(
     chat_tx: broadcast::Sender<ChatSignal>,
     event_tx: broadcast::Sender<StreamEvent>,
     now_playing_rx: watch::Receiver<Option<NowPlaying>>,
+    voice_roster_tx: watch::Sender<Option<VoiceRoster>>,
     port: u16,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
@@ -80,7 +89,16 @@ pub fn spawn(
                 None => return, // channel closed
             }
 
-            run_server(&mut cmd_rx, &status_tx, &chat_tx, &event_tx, &now_playing_rx, port).await;
+            run_server(
+                &mut cmd_rx,
+                &status_tx,
+                &chat_tx,
+                &event_tx,
+                &now_playing_rx,
+                &voice_roster_tx,
+                port,
+            )
+            .await;
         }
     })
 }
@@ -91,12 +109,14 @@ async fn run_server(
     chat_tx: &broadcast::Sender<ChatSignal>,
     event_tx: &broadcast::Sender<StreamEvent>,
     now_playing_rx: &watch::Receiver<Option<NowPlaying>>,
+    voice_roster_tx: &watch::Sender<Option<VoiceRoster>>,
     port: u16,
 ) {
     let app = routes::router(OverlayState {
         chat_tx: chat_tx.clone(),
         event_tx: event_tx.clone(),
         now_playing: now_playing_rx.clone(),
+        voice_roster_tx: voice_roster_tx.clone(),
     });
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
 

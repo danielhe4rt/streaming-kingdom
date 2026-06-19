@@ -149,6 +149,18 @@ pub fn service_status(def: &ServiceDef, app: &AppState, tui: &TuiState) -> (&'st
                 ("○", COLOR_INACTIVE, "Stopped".into())
             }
         }
+        ServiceId::Discord => {
+            if let Some(err) = &tui.discord.last_error {
+                ("●", COLOR_ERROR, format!("Error · {err}"))
+            } else if tui.discord.running {
+                match tui.discord.channel.as_deref() {
+                    Some(channel) => ("●", COLOR_CONNECTED, format!("Running · #{channel}")),
+                    None => ("●", COLOR_CONNECTED, "Running".into()),
+                }
+            } else {
+                ("○", COLOR_INACTIVE, "Stopped".into())
+            }
+        }
     }
 }
 

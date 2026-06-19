@@ -24,6 +24,7 @@ use tokio::sync::{broadcast, mpsc, watch};
 
 use crate::application::{AppState, EventLogConfig};
 use crate::domain::{AppEvent, ChatSignal, FeatureCommand, NowPlaying, StreamEvent};
+use crate::infrastructure::discord::{DiscordCommand, DiscordStatus};
 use crate::infrastructure::hyprland::{PrivacyCommand, PrivacyStatus};
 use crate::infrastructure::livepix::{LivepixCommand, LivepixStatus};
 use crate::infrastructure::waybar;
@@ -67,6 +68,8 @@ pub struct RunChannels {
     pub livepix_status_rx: mpsc::Receiver<LivepixStatus>,
     pub overlays_cmd_tx: mpsc::Sender<OverlayCommand>,
     pub overlays_status_rx: mpsc::Receiver<OverlayStatus>,
+    pub discord_cmd_tx: mpsc::Sender<DiscordCommand>,
+    pub discord_status_rx: mpsc::Receiver<DiscordStatus>,
     pub hyprland_rx: mpsc::Receiver<AppEvent>,
     pub twitch_event_rx: mpsc::Receiver<AppEvent>,
 }
@@ -104,6 +107,8 @@ pub async fn run(
         mut livepix_status_rx,
         overlays_cmd_tx,
         mut overlays_status_rx,
+        discord_cmd_tx,
+        mut discord_status_rx,
         mut hyprland_rx,
         mut twitch_event_rx,
     } = channels;
@@ -121,6 +126,8 @@ pub async fn run(
         &mut livepix_status_rx,
         &overlays_cmd_tx,
         &mut overlays_status_rx,
+        &discord_cmd_tx,
+        &mut discord_status_rx,
         &mut hyprland_rx,
         &mut twitch_event_rx,
         &mut chat_rx,
@@ -132,6 +139,7 @@ pub async fn run(
     let _ = privacy_cmd_tx.send(PrivacyCommand::Stop).await;
     let _ = livepix_cmd_tx.send(LivepixCommand::Stop).await;
     let _ = overlays_cmd_tx.send(OverlayCommand::Stop).await;
+    let _ = discord_cmd_tx.send(DiscordCommand::Stop).await;
 
     if app.waybar_enabled
         && let Err(e) = waybar::disable().await
@@ -157,6 +165,8 @@ async fn event_loop(
     livepix_status_rx: &mut mpsc::Receiver<LivepixStatus>,
     overlays_cmd_tx: &mpsc::Sender<OverlayCommand>,
     overlays_status_rx: &mut mpsc::Receiver<OverlayStatus>,
+    discord_cmd_tx: &mpsc::Sender<DiscordCommand>,
+    discord_status_rx: &mut mpsc::Receiver<DiscordStatus>,
     hyprland_rx: &mut mpsc::Receiver<AppEvent>,
     twitch_event_rx: &mut mpsc::Receiver<AppEvent>,
     chat_rx: &mut broadcast::Receiver<ChatSignal>,
@@ -181,6 +191,7 @@ async fn event_loop(
         drain::privacy_status(app, tui, privacy_status_rx);
         drain::livepix_status(app, tui, livepix_status_rx);
         drain::overlays_status(app, tui, overlays_status_rx);
+        drain::discord_status(app, tui, discord_status_rx);
         drain::hyprland_events(app, tui, hyprland_rx);
         drain::twitch_events(app, tui, twitch_event_rx);
         drain::chat_signals(app, tui, chat_rx);
@@ -196,6 +207,7 @@ async fn event_loop(
             privacy_cmd_tx,
             livepix_cmd_tx,
             overlays_cmd_tx,
+            discord_cmd_tx,
         )
         .await;
     }

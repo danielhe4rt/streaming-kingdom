@@ -205,12 +205,35 @@ async fn main() -> io::Result<()> {
         app.chat_tx.clone(),
         app.event_tx.clone(),
         app.subscribe_now_playing(),
+        app.voice_roster_tx.clone(),
         cfg.overlays.port,
     );
     app.log_event(AppEvent::Info(format!(
         "Overlays Output ready (toggle to serve on http://127.0.0.1:{}/overlay/coworking)",
         cfg.overlays.port
     )));
+
+    // Spawn the Discord voice-roster adapter as a toggleable Output. It idles
+    // until the TUI sends Start (Discord toggle), then runs the WS ingress + CDP
+    // injector against Vesktop, publishing roster snapshots on the voice_roster
+    // watch the Overlay Feed subscribes to (mirrors the Spotify observer wiring).
+    let (discord_cmd_tx, discord_cmd_rx) =
+        mpsc::channel::<infrastructure::discord::DiscordCommand>(16);
+    let (discord_status_tx, discord_status_rx) =
+        mpsc::channel::<infrastructure::discord::DiscordStatus>(64);
+    let discord_config = infrastructure::discord::DiscordConfig {
+        bridge_port: cfg.discord.bridge_port,
+        cdp_port: cfg.discord.cdp_port,
+    };
+    let _discord_handle = infrastructure::discord::spawn(
+        discord_cmd_rx,
+        discord_status_tx,
+        app.voice_roster_tx.clone(),
+        discord_config,
+    );
+    app.log_event(AppEvent::Info(
+        "Discord voice-roster Output ready (toggle to start; needs Vesktop --remote-debugging-port)".into(),
+    ));
 
     // Resolve Twitch chat badges once at startup (Helix global + channel) into
     // a set/version → url map the IRC adapter looks up per message (M2).
@@ -269,6 +292,8 @@ async fn main() -> io::Result<()> {
         livepix_status_rx,
         overlays_cmd_tx,
         overlays_status_rx,
+        discord_cmd_tx,
+        discord_status_rx,
         hyprland_rx,
         twitch_event_rx,
     };

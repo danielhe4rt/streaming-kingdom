@@ -56,6 +56,14 @@ body,
   }
 }
 
+/* LED sweep for the He4rt circuit logo: the dash window slides from the path's
+   start to its end. Paths use pathLength=100, so the offset animates 100 -> 0. */
+@keyframes heartLed {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
 @keyframes logoPulse {
   0%,
   100% {

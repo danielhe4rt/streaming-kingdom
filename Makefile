@@ -1,6 +1,7 @@
 .PHONY: webhook-server send help \
 	notify-follow notify-sub notify-giftsub notify-donate notify-cheer notify-raid \
-	notify-all notify-storm
+	notify-all notify-storm \
+	build release overlays overlays-deps check run clean
 
 APP_NAME  := streams-toolkit
 EXPIRE    := 8000
@@ -24,6 +25,14 @@ help:
 	@echo "  ║        streams-toolkit  Makefile             ║"
 	@echo "  ╚══════════════════════════════════════════════╝"
 	@echo ""
+	@echo "  Build"
+	@echo "    make build             Build overlays + toolkit (debug)"
+	@echo "    make release           Build overlays + toolkit (release)"
+	@echo "    make overlays          Build the React overlay bundle only"
+	@echo "    make check             Test + clippy + overlays typecheck"
+	@echo "    make run               Build overlays, then run the toolkit"
+	@echo "    make clean             Remove cargo + overlays build output"
+	@echo ""
 	@echo "  Server"
 	@echo "    make webhook-server    Run the webhook server"
 	@echo "    make send              Send test webhook payload"
@@ -40,6 +49,56 @@ help:
 	@echo ""
 	@echo "  Override any value:  make notify-donate USER=shroud AMOUNT=1337"
 	@echo ""
+
+# ──────────────────────────────────────────────
+# Build targets
+#
+# The Rust binary embeds overlays/dist at compile time (include_dir!, no
+# build.rs), so the overlay bundle MUST be built before cargo. Every target that
+# compiles the binary depends on `overlays` to guarantee that order.
+# ──────────────────────────────────────────────
+
+# Install overlay JS deps (idempotent; skipped if node_modules already present).
+overlays-deps:
+	@test -d overlays/node_modules || (echo "📦 Installing overlay deps..." && cd overlays && npm install)
+
+# Build the embedded React overlay bundle into overlays/dist.
+overlays: overlays-deps
+	@echo "🎨 Building overlays..."
+	@cd overlays && npm run build
+
+# Full debug build: overlays first, then the toolkit binary.
+build: overlays
+	@echo "🦀 Building toolkit (debug)..."
+	@cargo build
+	@echo "✅ Built: target/debug/$(APP_NAME)"
+
+# Full optimized build.
+release: overlays
+	@echo "🦀 Building toolkit (release)..."
+	@cargo build --release
+	@echo "✅ Built: target/release/$(APP_NAME)"
+
+# Verify everything: Rust tests, clippy (warnings = errors), overlays typecheck.
+check: overlays-deps
+	@echo "🧪 cargo test..."
+	@cargo test
+	@echo "📎 cargo clippy..."
+	@cargo clippy --all-targets
+	@echo "🔎 overlays typecheck..."
+	@cd overlays && npx tsc --noEmit
+	@echo "✅ All checks passed"
+
+# Build overlays then run the toolkit (TUI).
+run: overlays
+	@cargo run
+
+# Remove build output (cargo target + overlays dist).
+clean:
+	@echo "🧹 Cleaning..."
+	@cargo clean
+	@rm -rf overlays/dist
+	@echo "✅ Clean"
 
 # ──────────────────────────────────────────────
 # Server targets

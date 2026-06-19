@@ -7,7 +7,8 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::domain::{
-    ChatMessage, MessageFragment, NowPlaying, PlaybackStatus, StreamEvent, SubTier, emote_cdn_url,
+    ChatMessage, MessageFragment, NowPlaying, PlaybackStatus, StreamEvent, SubTier, VoiceMember,
+    VoiceRoster, emote_cdn_url,
 };
 
 /// One fireable test action. `ALL` is the display order in the Test events pane.
@@ -22,6 +23,7 @@ pub enum SyntheticKind {
     ViewerCount,
     Chat,
     NowPlaying,
+    VoiceRoster,
     /// Delete the most recently fired synthetic chat message (tests CLEARMSG).
     DeleteLast,
 }
@@ -37,6 +39,7 @@ impl SyntheticKind {
         SyntheticKind::ViewerCount,
         SyntheticKind::Chat,
         SyntheticKind::NowPlaying,
+        SyntheticKind::VoiceRoster,
         SyntheticKind::DeleteLast,
     ];
 
@@ -51,6 +54,7 @@ impl SyntheticKind {
             SyntheticKind::ViewerCount => "Viewer count",
             SyntheticKind::Chat => "Chat message",
             SyntheticKind::NowPlaying => "Now playing",
+            SyntheticKind::VoiceRoster => "Voice roster",
             SyntheticKind::DeleteLast => "Delete last message",
         }
     }
@@ -66,6 +70,7 @@ impl SyntheticKind {
             SyntheticKind::ViewerCount => "👁",
             SyntheticKind::Chat => "💬",
             SyntheticKind::NowPlaying => "🎵",
+            SyntheticKind::VoiceRoster => "🎙",
             SyntheticKind::DeleteLast => "🗑",
         }
     }
@@ -150,7 +155,10 @@ pub fn stream_event(kind: SyntheticKind, seq: u64) -> Option<StreamEvent> {
         SyntheticKind::ViewerCount => StreamEvent::ViewerCountUpdate {
             count: (seq % 500 + 20) as u32,
         },
-        SyntheticKind::Chat | SyntheticKind::NowPlaying | SyntheticKind::DeleteLast => {
+        SyntheticKind::Chat
+        | SyntheticKind::NowPlaying
+        | SyntheticKind::VoiceRoster
+        | SyntheticKind::DeleteLast => {
             return None;
         }
     })
@@ -166,7 +174,7 @@ pub fn chat_message(seq: u64) -> ChatMessage {
         "danielhe4rt",
         pick(CHAT_TEXTS, seq),
     );
-    if seq % 3 == 0 {
+    if seq.is_multiple_of(3) {
         msg.fragments.push(MessageFragment::Emote {
             id: "25".to_string(),
             url: emote_cdn_url("25"),
@@ -185,6 +193,41 @@ pub fn now_playing(seq: u64) -> NowPlaying {
         album: album.to_string(),
         art_url: None,
         status: PlaybackStatus::Playing,
+    }
+}
+
+/// Build a synthetic [`VoiceRoster`] snapshot to exercise the Voice Roster
+/// widget without a running Discord client: a fixed "coworking" channel with two
+/// members, the first speaking, the second self-muted. The seq seeds the user
+/// names so successive fires vary like the other builders.
+pub fn voice_roster(seq: u64) -> VoiceRoster {
+    let first = pick(USERS, seq);
+    let second = pick(USERS, seq + 1);
+    VoiceRoster {
+        channel_id: Some("123456789".to_string()),
+        channel_name: Some("coworking".to_string()),
+        members: vec![
+            VoiceMember {
+                user_id: format!("u-{seq}"),
+                display_name: first.to_string(),
+                avatar_url: None,
+                speaking: true,
+                self_mute: false,
+                self_deaf: false,
+                server_mute: false,
+                server_deaf: false,
+            },
+            VoiceMember {
+                user_id: format!("u-{}", seq + 1),
+                display_name: second.to_string(),
+                avatar_url: None,
+                speaking: false,
+                self_mute: true,
+                self_deaf: false,
+                server_mute: false,
+                server_deaf: false,
+            },
+        ],
     }
 }
 
@@ -208,7 +251,17 @@ mod tests {
     fn non_stream_kinds_have_no_stream_event() {
         assert!(stream_event(SyntheticKind::Chat, 0).is_none());
         assert!(stream_event(SyntheticKind::NowPlaying, 0).is_none());
+        assert!(stream_event(SyntheticKind::VoiceRoster, 0).is_none());
         assert!(stream_event(SyntheticKind::DeleteLast, 0).is_none());
+    }
+
+    #[test]
+    fn voice_roster_has_members_with_one_speaking() {
+        let roster = voice_roster(0);
+        assert_eq!(roster.channel_name.as_deref(), Some("coworking"));
+        assert_eq!(roster.members.len(), 2);
+        assert!(roster.members.iter().any(|m| m.speaking));
+        assert!(roster.members.iter().any(|m| m.self_mute));
     }
 
     #[test]

@@ -15,6 +15,58 @@ pub struct Config {
     pub event_log: EventLogConfig,
     #[serde(default)]
     pub overlays: OverlaysConfig,
+    #[serde(default)]
+    pub discord: DiscordConfig,
+}
+
+/// Discord voice-roster adapter config (the `cdp` source). The toolkit injects a
+/// reader into Vesktop over the DevTools port (`cdp_port`, matching
+/// `--remote-debugging-port` in `~/.config/vesktop-flags.conf`); that reader
+/// pushes roster snapshots to the local WS ingress on `bridge_port`.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct DiscordConfig {
+    /// Local WS port the injected reader pushes snapshots to.
+    #[serde(default = "default_bridge_port")]
+    pub bridge_port: u16,
+    /// Vesktop DevTools port to inject over (matches `--remote-debugging-port`).
+    #[serde(default = "default_cdp_port")]
+    pub cdp_port: u16,
+}
+
+/// Default WS ingress port — clear of overlays (1111), arRPC's bridge (1337),
+/// and the Discord RPC range (6463–6472).
+fn default_bridge_port() -> u16 {
+    1340
+}
+
+/// Default Chrome DevTools port (Electron's conventional one).
+fn default_cdp_port() -> u16 {
+    9222
+}
+
+impl Default for DiscordConfig {
+    fn default() -> Self {
+        Self {
+            bridge_port: default_bridge_port(),
+            cdp_port: default_cdp_port(),
+        }
+    }
+}
+
+impl DiscordConfig {
+    /// Override the ports from environment variables when set.
+    pub fn apply_env_overrides(&mut self) {
+        if let Ok(v) = env::var("DISCORD_BRIDGE_PORT")
+            && let Ok(port) = v.parse::<u16>()
+        {
+            self.bridge_port = port;
+        }
+        if let Ok(v) = env::var("DISCORD_CDP_PORT")
+            && let Ok(port) = v.parse::<u16>()
+        {
+            self.cdp_port = port;
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -26,7 +78,7 @@ pub struct OverlaysConfig {
 }
 
 fn default_overlays_port() -> u16 {
-    1337
+    1111
 }
 
 impl Default for OverlaysConfig {
@@ -260,6 +312,7 @@ impl Default for Config {
             },
             event_log: EventLogConfig::default(),
             overlays: OverlaysConfig::default(),
+            discord: DiscordConfig::default(),
         }
     }
 }
@@ -364,6 +417,7 @@ pub fn load() -> Result<Config, ConfigError> {
     config.twitch.apply_env_overrides();
     config.livepix.apply_env_overrides();
     config.overlays.apply_env_overrides();
+    config.discord.apply_env_overrides();
 
     Ok(config)
 }

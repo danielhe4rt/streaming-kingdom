@@ -5,6 +5,7 @@ use tokio::sync::{broadcast, mpsc, watch};
 use crate::application::config::EventLogConfig;
 use crate::domain::{
     AppEvent, AppEventEntry, ChatSignal, FeatureCommand, NowPlaying, StreamEvent, StreamStats,
+    VoiceRoster,
 };
 
 // ---------------------------------------------------------------------------
@@ -22,6 +23,7 @@ pub struct AppState {
     pub alerts_enabled: bool,
     pub livepix_enabled: bool,
     pub overlays_enabled: bool,
+    pub discord_enabled: bool,
 
     // broadcast: stream events (1 producer → N consumers)
     pub event_tx: broadcast::Sender<StreamEvent>,
@@ -40,6 +42,11 @@ pub struct AppState {
     // player observer publishes here; the Overlay Feed and the TUI Spotify row
     // both subscribe. `None` means stopped / no player. NOT logged into AppEvent.
     pub now_playing_tx: watch::Sender<Option<NowPlaying>>,
+
+    // watch: ambient voice-roster STATE (latest value, not an event). The Discord
+    // RPC adapter publishes here; the Overlay Feed subscribes. `None` means no
+    // active voice channel / Discord disconnected. NOT logged into AppEvent.
+    pub voice_roster_tx: watch::Sender<Option<VoiceRoster>>,
 
     // Running stats
     pub stats: StreamStats,
@@ -63,6 +70,7 @@ impl AppState {
         // Keep the sender; the initial receiver is dropped — consumers subscribe
         // on demand via `subscribe_now_playing()`.
         let (now_playing_tx, _) = watch::channel(None);
+        let (voice_roster_tx, _) = watch::channel(None);
 
         Self {
             waybar_enabled: false,
@@ -70,11 +78,13 @@ impl AppState {
             alerts_enabled: true,
             livepix_enabled: false,
             overlays_enabled: false,
+            discord_enabled: false,
             event_tx,
             chat_tx,
             command_tx,
             command_rx,
             now_playing_tx,
+            voice_roster_tx,
             stats: StreamStats::new(),
             event_log: Vec::new(),
             max_events: event_log_config.max_events,
@@ -101,6 +111,11 @@ impl AppState {
     /// Subscribe to the ambient now-playing state (Overlay Feed + TUI).
     pub fn subscribe_now_playing(&self) -> watch::Receiver<Option<NowPlaying>> {
         self.now_playing_tx.subscribe()
+    }
+
+    /// Subscribe to the ambient voice-roster state (Overlay Feed).
+    pub fn subscribe_voice_roster(&self) -> watch::Receiver<Option<VoiceRoster>> {
+        self.voice_roster_tx.subscribe()
     }
 
     /// Broadcast a stream event and update stats.
@@ -190,6 +205,20 @@ impl AppState {
                 self.overlays_enabled = false;
                 self.log_event(AppEvent::FeatureToggled {
                     feature: "Overlays".into(),
+                    enabled: false,
+                });
+            }
+            FeatureCommand::EnableDiscord => {
+                self.discord_enabled = true;
+                self.log_event(AppEvent::FeatureToggled {
+                    feature: "Discord".into(),
+                    enabled: true,
+                });
+            }
+            FeatureCommand::DisableDiscord => {
+                self.discord_enabled = false;
+                self.log_event(AppEvent::FeatureToggled {
+                    feature: "Discord".into(),
                     enabled: false,
                 });
             }
