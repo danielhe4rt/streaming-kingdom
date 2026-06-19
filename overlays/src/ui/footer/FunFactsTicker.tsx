@@ -1,17 +1,13 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 // ---------------------------------------------------------------------------
-// FunFactsTicker — the idle-state marquee in the footer's right region.
+// FunFactsTicker — the idle-state fun facts in the footer's right region.
 //
-// Headless/presentational: props only. Two stacked rows — a header ("HE4RT FUN
-// FACTS" label + a full-width brand rule) on top, and a horizontally scrolling
-// marquee of the given facts on its own line below. Each fact is followed by a
-// brand heart separator; the whole sequence is rendered TWICE inside the moving
-// track and the tickerScroll keyframe translates by -50%, so the second copy
-// seamlessly takes the place of the first — an infinite, gapless loop.
-//
-// Keyword accenting: numbers and URLs are highlighted automatically; named
-// entities come in via `highlightTerms` so the component stays content-agnostic.
+// Headless/presentational: props only (no feed coupling). Two stacked rows — a
+// header ("HE4RT FUN FACTS" label + a full-width brand rule) on top, and ONE
+// fact below. Facts rotate: each holds on screen for 5–10s, then cross-fades to
+// the next (not a marquee). Numbers/URLs are auto-accented; named entities come
+// in via `highlightTerms` so the component stays content-agnostic.
 // ---------------------------------------------------------------------------
 
 export interface FunFactsTickerProps {
@@ -19,6 +15,12 @@ export interface FunFactsTickerProps {
   /** Named entities (project/brand/tech) to accent. Numbers + URLs auto-accent. */
   highlightTerms?: string[];
 }
+
+// Each fact stays fully visible for a random hold in [HOLD_MIN, HOLD_MAX] before
+// fading out; FADE_MS is the fade-out/in duration.
+const HOLD_MIN_MS = 5000;
+const HOLD_MAX_MS = 10000;
+const FADE_MS = 500;
 
 // Auto-accented patterns: URLs/handles and numbers (incl. "27 mil").
 const URL_PATTERN = "(?:https?:\\/\\/|discord\\.gg\\/)\\S+|@\\w+";
@@ -52,37 +54,34 @@ function renderFact(fact: string, regex: RegExp): ReactNode[] {
     );
 }
 
-// The brand heart that separates facts (replaces the old "•" bullet).
-function Separator({ k }: { k: string }) {
-  return (
-    <span
-      key={k}
-      aria-hidden="true"
-      className="mx-[20px] text-[15px] text-brand-bright"
-    >
-      ♥
-    </span>
-  );
-}
-
 export function FunFactsTicker({ facts, highlightTerms = [] }: FunFactsTickerProps) {
   const regex = buildAccentRegex(highlightTerms);
+  const [index, setIndex] = useState(0);
+  const [visible, setVisible] = useState(true);
 
-  // One pass of [fact, heart, fact, heart, …]; rendered twice for the loop.
-  const pass = (prefix: string): ReactNode[] =>
-    facts.flatMap((fact, idx) => [
-      <span
-        key={`${prefix}f${idx}`}
-        className="whitespace-nowrap text-[21px] font-semibold text-brand-ticker"
-      >
-        {renderFact(fact, regex)}
-      </span>,
-      <Separator key={`${prefix}s${idx}`} k={`${prefix}s${idx}`} />,
-    ]);
+  // Hold the current fact (5–10s), then begin its fade-out.
+  useEffect(() => {
+    if (facts.length <= 1) return;
+    const ms = HOLD_MIN_MS + Math.random() * (HOLD_MAX_MS - HOLD_MIN_MS);
+    const hold = setTimeout(() => setVisible(false), ms);
+    return () => clearTimeout(hold);
+  }, [index, facts.length]);
+
+  // Once faded out, swap to the next fact and fade back in.
+  useEffect(() => {
+    if (visible) return;
+    const swap = setTimeout(() => {
+      setIndex((i) => (i + 1) % facts.length);
+      setVisible(true);
+    }, FADE_MS);
+    return () => clearTimeout(swap);
+  }, [visible, facts.length]);
+
+  const fact = facts[index] ?? "";
 
   return (
     // Footer's right region, full bar height. Two stacked rows: a header
-    // (label + full-width brand rule) on top, the scrolling facts below.
+    // (label + full-width brand rule) on top, the rotating fact below.
     <div className="absolute right-0 bottom-0 left-[792px] flex h-[122px] flex-col justify-center gap-[12px] overflow-hidden">
       {/* Header row: the label with a solid brand rule filling the width. */}
       <div className="flex items-center gap-[22px]">
@@ -92,26 +91,17 @@ export function FunFactsTicker({ facts, highlightTerms = [] }: FunFactsTickerPro
         <div className="h-[3px] flex-1 rounded-full bg-brand" />
       </div>
 
-      {/* Facts row: the scrolling marquee on its own line, edge-faded. */}
-      <div
-        className="relative flex h-[30px] items-center overflow-hidden"
-        // Edge fade: the scrolling text fades in on the right and out on the
-        // left instead of hard-cutting at the row bounds.
-        style={{
-          WebkitMaskImage:
-            "linear-gradient(90deg, transparent 0, #000 4%, #000 94%, transparent 100%)",
-          maskImage:
-            "linear-gradient(90deg, transparent 0, #000 4%, #000 94%, transparent 100%)",
-        }}
-      >
-        {/* Moving track: duplicated sequence + tickerScroll -50% = seamless loop */}
-        <div
-          className="flex items-center whitespace-nowrap will-change-transform"
-          style={{ animation: "tickerScroll 48s linear infinite" }}
+      {/* Facts row: one fact at a time, cross-fading on rotation. */}
+      <div className="flex h-[30px] items-center overflow-hidden">
+        <span
+          className="truncate text-[21px] font-semibold text-brand-ticker"
+          style={{
+            opacity: visible ? 1 : 0,
+            transition: `opacity ${FADE_MS}ms ease`,
+          }}
         >
-          {pass("a")}
-          {pass("b")}
-        </div>
+          {renderFact(fact, regex)}
+        </span>
       </div>
     </div>
   );
