@@ -131,6 +131,14 @@ pub struct TuiState {
     /// refreshed each tick from the `watch` receiver. `None` = nothing playing /
     /// no player. Read by the Spotify Service row.
     pub now_playing: Option<crate::domain::NowPlaying>,
+
+    /// Cursor over `synthetic::SyntheticKind::ALL` in the Test events pane
+    /// (moved with `J/K`, fired with `Enter`).
+    pub test_event_cursor: usize,
+
+    /// msg_id of the most recently fired synthetic chat message, so "Delete last
+    /// message" can target it (tests CLEARMSG removal on the Overlay).
+    pub last_test_msg_id: Option<String>,
 }
 
 impl TuiState {
@@ -164,6 +172,8 @@ impl TuiState {
             tts_available,
             overlays_port,
             now_playing: None,
+            test_event_cursor: 0,
+            last_test_msg_id: None,
         }
     }
 

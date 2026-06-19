@@ -12,6 +12,7 @@
 
 pub mod assets;
 pub mod controllers;
+pub mod dev;
 pub mod resources;
 pub mod routes;
 

@@ -62,6 +62,7 @@ fn draw_content(frame: &mut Frame, area: Rect, app: &AppState, tui: &TuiState) {
         Section::Overlays => match sub {
             SubItem::Overlay(id) => overlays::draw_detail(frame, area, id, app, tui),
             SubItem::Feed => overlays::draw_feed(frame, area, tui),
+            SubItem::TestEvents => overlays::draw_test_events(frame, area, tui),
             _ => overlays::draw_all(frame, area, app, tui),
         },
         Section::Activity => match sub {

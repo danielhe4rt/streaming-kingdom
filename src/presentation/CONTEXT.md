@@ -58,8 +58,20 @@ An animated takeover of the Footer Bar triggered by a `StreamEvent` (donation / 
 
 **Service**:
 A row in the TUI representing one integration, classified as an **Input** or an **Output**.
-- **Input** — feeds the toolkit (Twitch EventSub, Twitch Chat, Livepix, Hyprland). Read-only/monitor.
+- **Input** — feeds the toolkit (Twitch EventSub, Twitch Chat, Livepix, Hyprland, Spotify). Read-only/monitor.
 - **Output** — driven by the toolkit (Waybar bar, Overlays). Toggleable on/off.
+
+**Synthetic Event**:
+A fabricated stream event / chat message / now-playing track that the streamer fires to preview the
+Overlay without real Twitch/Livepix/Spotify traffic. It is **indistinguishable from a real event**
+everywhere — the Overlay reacts, the TUI log shows it, and the stats counters move — because it rides
+the same channels a real one does. _Avoid_: fake event, mock event.
+
+**Test Events**:
+The always-present **Test events** sub-item under the Overlays section that fires **Synthetic Events**
+(every Overlay-rendered kind: each StreamEvent, a chat message, a now-playing track, and a
+delete-last-message). A deliberate dev affordance — `J/K` picks a type, `Enter` fires. Also reachable
+via the `/overlay/dev` browser panel; both build their events from one shared source.
 
 ## Relationships
 

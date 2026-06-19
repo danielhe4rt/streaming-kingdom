@@ -6,6 +6,7 @@
 //! Inbound HTTP (e.g. the Livepix webhook) stays in `infrastructure/`.
 
 pub mod http;
+pub mod synthetic;
 pub mod tui;
 
 pub use tui::{run, RunChannels};

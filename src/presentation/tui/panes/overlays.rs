@@ -137,6 +137,60 @@ pub fn draw_feed(frame: &mut Frame, area: Rect, tui: &TuiState) {
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), inner);
 }
 
+/// The Test events dispatch pane: a selectable list of Synthetic Events. `J/K`
+/// moves the cursor; `Enter` fires the selected one onto the real channels, so
+/// the Overlay and the TUI log react exactly as to a real event (ADR-0002).
+pub fn draw_test_events(frame: &mut Frame, area: Rect, tui: &TuiState) {
+    use crate::presentation::synthetic::SyntheticKind;
+
+    let block = format::make_block("Test events", true);
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let mut lines = vec![
+        Line::from(Span::styled(
+            "  Dispara eventos sintéticos nos canais reais — a Overlay e o log reagem como a um evento real.",
+            Style::default().fg(COLOR_MUTED),
+        )),
+        Line::from(""),
+    ];
+
+    for (i, kind) in SyntheticKind::ALL.iter().enumerate() {
+        let selected = i == tui.test_event_cursor;
+        let label = format!("{} {}", kind.icon(), kind.label());
+        if selected {
+            lines.push(Line::from(vec![
+                Span::styled("  ▌ ", Style::default().fg(COLOR_ACCENT)),
+                Span::styled(
+                    label,
+                    Style::default().fg(COLOR_ACCENT).add_modifier(Modifier::BOLD),
+                ),
+            ]));
+        } else {
+            lines.push(Line::from(Span::styled(
+                format!("    {label}"),
+                Style::default().fg(COLOR_PRIMARY),
+            )));
+        }
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "  J/K move · Enter dispara",
+        Style::default().fg(COLOR_MUTED),
+    )));
+    let last = match &tui.last_test_msg_id {
+        Some(id) => format!("  última msg de teste: {id}"),
+        None => "  nenhuma msg de teste enviada ainda".to_string(),
+    };
+    lines.push(Line::from(Span::styled(
+        last,
+        Style::default().fg(COLOR_MUTED).add_modifier(Modifier::ITALIC),
+    )));
+
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), inner);
+}
+
 fn server_line(app: &AppState, tui: &TuiState) -> Line<'static> {
     let (dot, color, label) = if tui.overlays.running {
         ("●", COLOR_CONNECTED, "RUNNING")

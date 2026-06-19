@@ -9,7 +9,8 @@ use super::nav::{Section, SubItem};
 use super::service::{self, ServiceId};
 use super::state::TuiState;
 use crate::application::AppState;
-use crate::domain::FeatureCommand;
+use crate::domain::{ChatMessageDeleted, ChatSignal, FeatureCommand};
+use crate::presentation::synthetic::{self, SyntheticKind};
 
 /// Handle a key event. Returns `true` when the app should quit.
 pub async fn handle_key(
@@ -50,6 +51,10 @@ pub async fn handle_key(
 
         KeyCode::Char('G') | KeyCode::End => reset_scroll(tui),
 
+        // On the Test events pane, Enter fires the selected Synthetic Event
+        // (instead of toggling the Overlays server).
+        KeyCode::Enter if is_test_events(tui) => fire_test_event(app, tui),
+
         // Toggle the Service the sub-nav currently selects.
         KeyCode::Char(' ') | KeyCode::Enter => {
             if let Some(id) = selected_service(tui)
@@ -86,8 +91,51 @@ fn selected_service(tui: &TuiState) -> Option<ServiceId> {
             SubItem::Service(id) => Some(id),
             _ => None,
         },
-        Section::Overlays => Some(ServiceId::Overlays),
+        // Every Overlays sub-item toggles the one server — except Test events,
+        // where Enter fires a Synthetic Event instead.
+        Section::Overlays => match tui.nav.current_sub() {
+            SubItem::TestEvents => None,
+            _ => Some(ServiceId::Overlays),
+        },
         _ => None,
+    }
+}
+
+/// Whether the Test events pane is active (Enter fires; J/K moves the cursor).
+fn is_test_events(tui: &TuiState) -> bool {
+    tui.nav.section == Section::Overlays && tui.nav.current_sub() == SubItem::TestEvents
+}
+
+/// Fire the Synthetic Event the Test events cursor selects, onto the *real*
+/// channels (ADR-0002) so the Overlay and the TUI react identically to a real
+/// one. All senders take `&self`, so an immutable `&AppState` is enough.
+fn fire_test_event(app: &AppState, tui: &mut TuiState) {
+    let Some(kind) = SyntheticKind::ALL.get(tui.test_event_cursor).copied() else {
+        return;
+    };
+    match kind {
+        SyntheticKind::DeleteLast => {
+            if let Some(id) = tui.last_test_msg_id.clone() {
+                let _ = app
+                    .chat_tx
+                    .send(ChatSignal::Deleted(ChatMessageDeleted::new(id)));
+            }
+        }
+        SyntheticKind::Chat => {
+            let msg = synthetic::chat_message(synthetic::next_seq());
+            tui.last_test_msg_id = Some(msg.msg_id.clone());
+            let _ = app.chat_tx.send(ChatSignal::Message(msg));
+        }
+        SyntheticKind::NowPlaying => {
+            let _ = app
+                .now_playing_tx
+                .send(Some(synthetic::now_playing(synthetic::next_seq())));
+        }
+        other => {
+            if let Some(event) = synthetic::stream_event(other, synthetic::next_seq()) {
+                let _ = app.event_tx.send(event);
+            }
+        }
     }
 }
 
@@ -98,6 +146,11 @@ fn scroll_down(tui: &mut TuiState) {
         }
         (Section::Activity, SubItem::Chat) | (Section::Overlays, SubItem::Feed) => {
             tui.chat_scroll = tui.chat_scroll.saturating_add(1);
+        }
+        // On the Test events pane J/K moves the event-type cursor (wraps).
+        (Section::Overlays, SubItem::TestEvents) => {
+            let len = SyntheticKind::ALL.len();
+            tui.test_event_cursor = (tui.test_event_cursor + 1) % len;
         }
         _ => {}
     }
@@ -110,6 +163,10 @@ fn scroll_up(tui: &mut TuiState) {
         }
         (Section::Activity, SubItem::Chat) | (Section::Overlays, SubItem::Feed) => {
             tui.chat_scroll = tui.chat_scroll.saturating_sub(1);
+        }
+        (Section::Overlays, SubItem::TestEvents) => {
+            let len = SyntheticKind::ALL.len();
+            tui.test_event_cursor = (tui.test_event_cursor + len - 1) % len;
         }
         _ => {}
     }

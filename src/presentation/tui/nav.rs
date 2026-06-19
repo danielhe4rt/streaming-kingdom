@@ -55,10 +55,11 @@ pub enum SubItem {
     // Services — `All` then one per Service in the registry.
     AllServices,
     Service(ServiceId),
-    // Overlays — `All`, one per Overlay, then the Feed.
+    // Overlays — `All`, one per Overlay, the Feed, then the test-event dispatch.
     AllOverlays,
     Overlay(OverlayId),
     Feed,
+    TestEvents,
     // Activity
     Chat,
     Events,
@@ -112,6 +113,7 @@ pub fn sub_items(section: Section) -> Vec<SubItem> {
             let mut v = vec![SubItem::AllOverlays];
             v.extend(OverlayId::ALL.iter().map(|o| SubItem::Overlay(o.id)));
             v.push(SubItem::Feed);
+            v.push(SubItem::TestEvents);
             v
         }
         Section::Activity => vec![SubItem::Chat, SubItem::Events, SubItem::Highlights],
@@ -136,6 +138,7 @@ pub fn sub_label(item: SubItem) -> String {
         SubItem::AllOverlays => "All overlays".into(),
         SubItem::Overlay(id) => format!("{} overlay", id.def().name),
         SubItem::Feed => "Feed (SSE)".into(),
+        SubItem::TestEvents => "Test events".into(),
         SubItem::Chat => "Live Chat".into(),
         SubItem::Events => "Event Log".into(),
         SubItem::Highlights => "Highlights".into(),
@@ -244,7 +247,8 @@ mod tests {
         assert_eq!(items[0], SubItem::AllOverlays);
         assert_eq!(items[1], SubItem::Overlay(OverlayId::Coworking));
         assert_eq!(items[2], SubItem::Feed);
-        assert_eq!(items.len(), 3);
+        assert_eq!(items[3], SubItem::TestEvents);
+        assert_eq!(items.len(), 4);
     }
 
     #[test]
@@ -277,11 +281,11 @@ mod tests {
     fn sub_nav_cursor_clamps_at_bounds() {
         let mut nav = NavState::new();
         nav.select_section(Section::Overlays);
-        // Walk past the end — should clamp at Feed.
+        // Walk past the end — should clamp at the last sub-item (Test events).
         for _ in 0..10 {
             nav.next_sub();
         }
-        assert_eq!(nav.current_sub(), SubItem::Feed);
+        assert_eq!(nav.current_sub(), SubItem::TestEvents);
         // Walk past the start — should clamp at AllOverlays.
         for _ in 0..10 {
             nav.prev_sub();
