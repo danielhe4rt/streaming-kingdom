@@ -48,7 +48,10 @@ The module exports two key entry points from `mod.rs`:
    - Returns a `JoinHandle` for graceful shutdown (though not explicitly joined; lifecycle is tied to the app).
    - **No config needed** for this listener; it just connects to the local Hyprland socket.
 
-2. **`pub fn spawn(cmd_rx, status_tx, config, obs_host, obs_port, obs_password, capture_source) -> JoinHandle`** (`privacy_monitor.rs`)
+2. **`pub fn spawn(cmd_rx, status_tx, config, obs_host, obs_port, obs_password, capture_source) -> JoinHandle`** (`privacy_monitor/`, re-exported from `privacy_monitor/monitor.rs`)
+
+   > The privacy monitor is a folder module sliced by concern; public paths (`spawn`, `PrivacyCommand`, `PrivacyStatus`) are unchanged. Slices: `messages.rs` (`PrivacyCommand`/`PrivacyStatus`), `sensitive_match.rs` (title→pattern matching + tests), `window_events.rs` (snapshot + Hyprland listener), `blur_state.rs` (OBS blur transition + teardown), `monitor.rs` (`spawn` + the monitor task).
+
    - Called once at startup (line 160 of `main.rs`) with:
      - `cmd_rx`: receives `PrivacyCommand::Start` / `::Stop` from the TUI to toggle monitoring.
      - `status_tx`: sends `PrivacyStatus` updates back to the TUI (Running, Stopped, BlurEnabled, BlurDisabled, Error).
@@ -97,7 +100,7 @@ AsyncEventListener (hyprland crate)
 mpsc::Sender<AppEvent> (to TUI event log)
 ```
 
-**Privacy monitor (privacy_monitor.rs):**
+**Privacy monitor (privacy_monitor/):**
 ```
 TUI → PrivacyCommand (Start/Stop) → mpsc::Receiver
                                        ↓
