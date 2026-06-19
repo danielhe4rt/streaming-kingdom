@@ -1,6 +1,26 @@
 # Domain — chat
 
-**Keep in sync:** this file documents `src/domain/chat.rs`. Whenever that code changes, update this doc in the same change. (See CLAUDE.md → Layer docs.)
+**Keep in sync:** this file documents `src/domain/chat/`. Whenever that code changes, update this doc in the same change. (See CLAUDE.md → Layer docs.)
+
+## Module layout
+
+The chat domain is a folder module (`src/domain/chat/`) sliced by concern. Its
+public API is unchanged — every type is still re-exported from `crate::domain`
+(and `domain::chat::*`). Slices:
+
+| File | Concern |
+|------|---------|
+| `chat/mod.rs` | Module wiring, re-exports, `DEFAULT_CHAT_COLOR` |
+| `chat/emote.rs` | `MessageFragment`, `EmoteSpan`, `emote_cdn_url` — body fragments + emote CDN urls |
+| `chat/badge.rs` | `ChatBadge` and `ChatMessage::parse_badges` (the IRC `badges` tag) |
+| `chat/message.rs` | The `ChatMessage` value + text-only path (`from_text`, `with_badges`, `plain_text`) |
+| `chat/fragment_split.rs` | `ChatMessage::from_fragments` / `split_fragments` — interleaving text + emotes (tests in `chat/fragment_split/tests.rs`) |
+| `chat/moderation.rs` | `ChatMessageDeleted`, `ChatSignal` — delete signals + broadcast envelope |
+
+> The prose below predates the enriched-message work (badges, emotes, fragments,
+> moderation signals) and describes only the original flat `ChatMessage`. It is
+> retained as-is; only the file-path reference and this layout section were
+> updated during the vertical-slice refactor.
 
 ## What this models
 
