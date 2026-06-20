@@ -30,8 +30,20 @@ Livepix (https://livepix.gg) is a donation/tipping service for live streamers. I
 ## How it's wired
 
 **Public entry point:** `pub fn spawn()`
-- Located in `src/infrastructure/livepix/webhook.rs`
+- Located in `src/infrastructure/livepix/webhook/` (a folder module sliced by concern; `spawn` is re-exported from `webhook/server.rs`, so its public path is unchanged)
 - Signature: spawns a long-running tokio task that manages the Livepix webhook server lifecycle
+
+**Module layout** (`src/infrastructure/livepix/webhook/`):
+
+| File | Concern |
+|------|---------|
+| `webhook/mod.rs` | Module wiring + `pub use server::spawn` |
+| `webhook/payload.rs` | Webhook callback + API response deserialization types |
+| `webhook/server_state.rs` | Shared `ServerState` threaded through the handlers |
+| `webhook/oauth.rs` | `client_credentials` OAuth flow + token caching (`get_oauth_token`, `resolve_token`) |
+| `webhook/message_api.rs` | Fetching full donation detail from the REST API (`fetch_message`) |
+| `webhook/handlers.rs` | Axum route handlers (`health_check`, `handle_webhook`, donation fan-out) |
+| `webhook/server.rs` | The `spawn` entry-point + per-session `run_server` lifecycle |
 - Parameters:
   - `cmd_rx: mpsc::Receiver<LivepixCommand>` — receives `Start` / `Stop` commands from the TUI
   - `status_tx: mpsc::Sender<LivepixStatus>` — sends status updates back to the TUI (running port, OAuth success/failure, webhook received, errors)

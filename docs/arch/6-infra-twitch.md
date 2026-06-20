@@ -8,7 +8,23 @@ Twitch is a live streaming platform providing two primary APIs that this toolkit
 
 ## What we use from it
 
-### EventSub WebSocket (`eventsub.rs`)
+### EventSub WebSocket (`eventsub/`)
+
+The EventSub client is a folder module (`eventsub/`) sliced by concern. Its public API is unchanged — `pub use eventsub::TwitchClient` still re-exports the client. Slices:
+
+| File | Concern |
+|------|---------|
+| `eventsub/mod.rs` | Module wiring, `TwitchClient` re-export, shared URL/backoff constants |
+| `eventsub/client.rs` | The `TwitchClient` value and the top-level reconnect/backoff supervision loop (`run`) |
+| `eventsub/connection.rs` | Per-connection lifecycle: connect → handshake → subscribe → listen loop (`connect_and_listen`, `ReconnectAction`) |
+| `eventsub/handshake.rs` | Awaiting `session_welcome` and extracting the session id (`wait_for_welcome`) |
+| `eventsub/subscription_catalog.rs` | The fixed `SubDef` catalog (`SUBSCRIPTIONS`) of types to register |
+| `eventsub/subscriptions.rs` | The registration loop with one 401-triggered token refresh + retry (`subscribe_events`) |
+| `eventsub/subscription_request.rs` | Building and sending a single Helix subscription request (`try_subscribe`) |
+| `eventsub/message_handler.rs` | Dispatching decoded frames by message type (`handle_message`, `MessageResult`) |
+| `eventsub/event_parsing.rs` | Turning notification payloads into domain `StreamEvent`s (`parse_event`, `parse_tier`) |
+| `eventsub/token_refresh.rs` | OAuth token refresh and persistence (`refresh_token`) |
+| `eventsub/error.rs` | The shared `ClientError` |
 
 **Protocol & Endpoint:**
 - **WebSocket:** `wss://eventsub.wss.twitch.tv/ws` (TLS-secured WebSocket)
