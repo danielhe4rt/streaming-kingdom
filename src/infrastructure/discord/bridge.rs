@@ -33,6 +33,7 @@ fn log(status_tx: &mpsc::Sender<DiscordStatus>, line: impl Into<String>) {
 /// the port cannot be bound.
 pub async fn serve(
     port: u16,
+    log_speaking: bool,
     status_tx: &mpsc::Sender<DiscordStatus>,
     roster_tx: &watch::Sender<Option<VoiceRoster>>,
 ) -> io::Result<()> {
@@ -40,19 +41,20 @@ pub async fn serve(
     let listener = TcpListener::bind(addr).await?;
     tracing::info!("discord bridge: listening on ws://{addr}");
     log(status_tx, format!("ingress listening on :{port}, waiting for Vesktop reader…"));
-    accept_loop(listener, status_tx, roster_tx).await
+    accept_loop(listener, log_speaking, status_tx, roster_tx).await
 }
 
 /// Accept connections forever, clearing the roster between them. Split out from
 /// [`serve`] so tests can drive a pre-bound listener.
 async fn accept_loop(
     listener: TcpListener,
+    log_speaking: bool,
     status_tx: &mpsc::Sender<DiscordStatus>,
     roster_tx: &watch::Sender<Option<VoiceRoster>>,
 ) -> io::Result<()> {
     loop {
         let (stream, _peer) = listener.accept().await?;
-        handle_conn(stream, status_tx, roster_tx).await;
+        handle_conn(stream, log_speaking, status_tx, roster_tx).await;
         // The reader disconnected → clear the roster until it reconnects.
         let _ = roster_tx.send(None);
         log(status_tx, "reader disconnected — roster cleared");
@@ -63,6 +65,7 @@ async fn accept_loop(
 /// and log the diff vs. the previous one, until the socket closes or errors.
 async fn handle_conn(
     stream: TcpStream,
+    log_speaking: bool,
     status_tx: &mpsc::Sender<DiscordStatus>,
     roster_tx: &watch::Sender<Option<VoiceRoster>>,
 ) {
@@ -84,7 +87,7 @@ async fn handle_conn(
         match serde_json::from_str::<BridgeSnapshot>(&text) {
             Ok(snapshot) => {
                 let roster = snapshot.into_roster();
-                for line in diff_lines(prev.as_ref(), &roster) {
+                for line in diff_lines(prev.as_ref(), &roster, log_speaking) {
                     log(status_tx, line);
                 }
                 let _ = roster_tx.send(Some(roster.clone()));

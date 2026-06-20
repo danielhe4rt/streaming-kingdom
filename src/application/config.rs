@@ -31,6 +31,10 @@ pub struct DiscordConfig {
     /// Vesktop DevTools port to inject over (matches `--remote-debugging-port`).
     #[serde(default = "default_cdp_port")]
     pub cdp_port: u16,
+    /// Log per-member speaking start/stop to the TUI event log. Noisy while
+    /// talking, so it defaults to off; connect/channel/join/leave always log.
+    #[serde(default)]
+    pub log_speaking: bool,
 }
 
 /// Default WS ingress port — clear of overlays (1111), arRPC's bridge (1337),
@@ -49,6 +53,7 @@ impl Default for DiscordConfig {
         Self {
             bridge_port: default_bridge_port(),
             cdp_port: default_cdp_port(),
+            log_speaking: false,
         }
     }
 }

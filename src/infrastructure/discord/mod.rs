@@ -45,6 +45,8 @@ pub struct DiscordConfig {
     pub bridge_port: u16,
     /// Vesktop DevTools port to inject over (`--remote-debugging-port`).
     pub cdp_port: u16,
+    /// Log per-member speaking start/stop to the TUI (noisy; off by default).
+    pub log_speaking: bool,
 }
 
 /// Spawn the Discord roster adapter as a tokio task.
@@ -102,7 +104,7 @@ async fn session(
     voice_roster_tx: &watch::Sender<Option<VoiceRoster>>,
 ) -> std::io::Result<()> {
     tokio::select! {
-        result = bridge::serve(config.bridge_port, status_tx, voice_roster_tx) => result,
+        result = bridge::serve(config.bridge_port, config.log_speaking, status_tx, voice_roster_tx) => result,
         result = cdp::inject_loop(config.cdp_port, config.bridge_port, status_tx) => result,
     }
 }

@@ -74,14 +74,16 @@ One JSON message per change; a cleared roster (left voice) sends `channelId: nul
 
 ```toml
 [discord]
-# bridge_port = 1340   # local WS ingress the injected reader pushes to
-# cdp_port = 9222      # must match Vesktop's --remote-debugging-port
+# bridge_port = 1340     # local WS ingress the injected reader pushes to
+# cdp_port = 9222        # must match Vesktop's --remote-debugging-port
+# log_speaking = false   # log per-member speaking start/stop to the TUI (noisy)
 ```
 
 | Field | Source | Used for |
 |-------|--------|----------|
 | `bridge_port` | `[discord]` config (or `DISCORD_BRIDGE_PORT`) | WS ingress the reader pushes to (default `1340`) |
 | `cdp_port` | `[discord]` config (or `DISCORD_CDP_PORT`) | Vesktop DevTools port to inject over (default `9222`) |
+| `log_speaking` | `[discord]` config | log per-member speaking start/stop to the TUI event log (default `false`; connect/channel/join/leave always log) |
 
 Ports are kept distinct from overlays (`1111`) and arRPC's bridge (`1337`).
 

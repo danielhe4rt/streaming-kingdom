@@ -224,6 +224,7 @@ async fn main() -> io::Result<()> {
     let discord_config = infrastructure::discord::DiscordConfig {
         bridge_port: cfg.discord.bridge_port,
         cdp_port: cfg.discord.cdp_port,
+        log_speaking: cfg.discord.log_speaking,
     };
     let _discord_handle = infrastructure::discord::spawn(
         discord_cmd_rx,

@@ -13,7 +13,7 @@ async fn snapshot_over_ws_publishes_roster() {
     let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
     let port = listener.local_addr().unwrap().port();
     tokio::spawn(async move {
-        let _ = accept_loop(listener, &status_tx, &tx).await;
+        let _ = accept_loop(listener, false, &status_tx, &tx).await;
     });
 
     let (mut ws, _) = tokio_tungstenite::connect_async(format!("ws://127.0.0.1:{port}/"))

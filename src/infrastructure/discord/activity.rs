@@ -11,8 +11,9 @@ use crate::domain::VoiceRoster;
 
 /// Log lines describing what changed between `prev` and `next`. A channel change
 /// (or first snapshot) yields a single summary line; otherwise per-member
-/// join/leave and speaking transitions.
-pub fn diff_lines(prev: Option<&VoiceRoster>, next: &VoiceRoster) -> Vec<String> {
+/// join/leave and — only when `log_speaking` — speaking transitions (these fire
+/// often while talking, so they are off by default).
+pub fn diff_lines(prev: Option<&VoiceRoster>, next: &VoiceRoster, log_speaking: bool) -> Vec<String> {
     let mut lines = Vec::new();
 
     if prev.and_then(|r| r.channel_id.as_deref()) != next.channel_id.as_deref() {
@@ -42,12 +43,14 @@ pub fn diff_lines(prev: Option<&VoiceRoster>, next: &VoiceRoster) -> Vec<String>
             lines.push(format!("− {} left", p.display_name));
         }
     }
-    for m in &next.members {
-        let was_speaking = prev.members.iter().find(|p| p.user_id == m.user_id).is_some_and(|p| p.speaking);
-        if m.speaking && !was_speaking {
-            lines.push(format!("🎤 {} speaking", m.display_name));
-        } else if !m.speaking && was_speaking {
-            lines.push(format!("   {} stopped", m.display_name));
+    if log_speaking {
+        for m in &next.members {
+            let was_speaking = prev.members.iter().find(|p| p.user_id == m.user_id).is_some_and(|p| p.speaking);
+            if m.speaking && !was_speaking {
+                lines.push(format!("🎤 {} speaking", m.display_name));
+            } else if !m.speaking && was_speaking {
+                lines.push(format!("   {} stopped", m.display_name));
+            }
         }
     }
     lines
