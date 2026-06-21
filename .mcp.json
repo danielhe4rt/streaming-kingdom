@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "obs": {
+      "command": "agentic-obs",
+      "args": [],
+      "env": {
+        "OBS_HOST": "${OBS_HOST:-localhost}",
+        "OBS_PORT": "${OBS_PORT:-4455}",
+        "OBS_PASSWORD": "${OBS_PASSWORD:-}"
+      }
+    }
+  }
+}

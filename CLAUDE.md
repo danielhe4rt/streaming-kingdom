@@ -88,6 +88,15 @@ Canonical triage roles use their default strings, plus `area:*` (DDD layer) and 
 
 Multi-context: `CONTEXT-MAP.md` at the root points to one `CONTEXT.md` per layer (domain, application, infrastructure, presentation). See `docs/agents/domain.md`.
 
+### OBS MCP (agentic-obs) — project standard
+
+The **standard way to inspect and control OBS during development** is the `agentic-obs` MCP server (Go, obs-websocket v5, read **and** control — 81 tools incl. filters + screenshots). It is wired project-scoped in `.mcp.json` (committed) so every agent on this repo gets it.
+
+- **Install / update:** `go install github.com/ironystock/agentic-obs@latest`. The binary lands in the active Go toolchain's bin (mise-managed here, so it is version-pinned to the current Go — **re-run this after a Go upgrade** or the command vanishes from `PATH`).
+- **Connection:** `.mcp.json` expands `OBS_HOST` / `OBS_PORT` / `OBS_PASSWORD` from the environment — **no secret is committed**. These are the same vars the toolkit uses (`.env`). Claude Code does **not** auto-source the repo's gitignored `.env`, so for auth to work, `OBS_PASSWORD` must be exported in the shell Claude Code launches from. Requires OBS running with its WebSocket server enabled (Tools → WebSocket Server Settings, default port 4455).
+- **Use:** read + control, **only with the user present** — never reconfigure OBS unattended/in background. Do not pass `--tui` (that runs its terminal dashboard instead of the MCP server).
+- **Design it supports:** the OBS snapshot / Scene baseline / reconcile model lives in `src/infrastructure/docs/adr/0002-obs-snapshot-seeded-reconcile.md` and the OBS glossary in `src/infrastructure/CONTEXT.md`.
+
 ## Layer docs
 
 Robust prose docs live in `docs/arch/`, one numbered file per domain module and per infrastructure service. They complement the glossaries in each `src/<layer>/CONTEXT.md` (which hold the ubiquitous-language terms, not prose).

@@ -135,6 +135,28 @@ A feature that silently disables (does not crash the app) when its external depe
 **WebSocket connection**:
 A persistent TCP connection to OBS's API server (default port 4455) over which filter control commands are sent.
 
+### OBS Auto-Setup & Privacy Guardrails
+
+**Scene baseline**:
+A known-good OBS scene collection, captured once, that the toolkit reconciles the live OBS toward; the single source of truth for "the way my stream should be set up".
+_Avoid_: golden state, template, desired config.
+
+**OBS snapshot**:
+A serialized capture of the live OBS state — scenes, scene items + transforms, inputs + settings, filters — taken via obws read requests; capturing one is how a **Scene baseline** is produced.
+_Avoid_: backup, dump, export.
+
+**Portal restore token**:
+The opaque `xdg-desktop-portal` ScreenCast token OBS stores inside a pipewire **Capture source**'s input settings; the only way to re-select which monitor is captured without the interactive portal dialog. Carried inside an **OBS snapshot** and replayed on reconcile, so the streamer picks the monitor by hand only once.
+
+**Reconcile**:
+Bringing the live OBS back into agreement with the **Scene baseline** — create-if-missing, fix-if-wrong — triggered on toolkit↔OBS (re)connection (toolkit boot with OBS up, or obws reconnect after OBS restarts / switches scene collection).
+
+**Privacy pair**:
+The two OBS objects that must BOTH exist for privacy enforcement to work — the **Capture source** and its **Blur filter**. The safety-critical subset of the **Scene baseline**: when it can't be restored, reconcile fails loud instead of degrading silently.
+
+**Blur-time verification**:
+A just-in-time check run the moment the **Privacy Monitor** enables blur (i.e. when a sensitive window opens): it confirms the blur actually took effect and, on failure, alerts loudly in the TUI instead of swallowing the error. The fail-loud replacement for **Non-fatal degradation** on the **Privacy pair**. Not a continuous watcher — it fires only when blur is attempted.
+
 ### Waybar Status Bar Integration
 
 **stream_data.json**:
@@ -215,6 +237,10 @@ NowPlaying and rendered as the real album cover in the Overlay's Now Playing wid
 - A **Privacy Monitor** manages one **WebSocket connection** to OBS.
 - A **Privacy Monitor** controls one **Blur filter** per **Capture source**.
 - A **Blur filter** toggles between enabled (active blur) and disabled (inactive blur) states via **WebSocket connection**.
+- An **OBS snapshot** captures the live OBS state into a **Scene baseline**, including the **Portal restore token** of each pipewire **Capture source**.
+- **Reconcile** compares the live OBS against the **Scene baseline** on toolkit↔OBS (re)connection and creates-or-fixes drifted objects.
+- The **Privacy pair** (a **Capture source** + its **Blur filter**) is the safety-critical subset of a **Scene baseline**; **Reconcile** fails loud on it instead of degrading silently.
+- **Blur-time verification** runs inside the **Privacy Monitor** when it enables a **Blur filter**, replacing **Non-fatal degradation** for the **Privacy pair**.
 - An **event_writer** task consumes **StreamEvent**s and produces **WaybarEvent**s.
 - Each **WaybarEvent** is written to **stream_data.json** as part of a list capped at **MAX_EVENTS**.
 - The **stream_events.py** script reads **stream_data.json** and formats events with **opacity fading**.
@@ -251,6 +277,8 @@ NowPlaying and rendered as the real album cover in the Overlay's Now Playing wid
 - **'channel.follow'** (EventSub subscription type) vs **'channel'** (IRC channel name): Both use the word 'channel' but refer to different concepts. EventSub subscriptions are registered per broadcaster; IRC channels are joined by name. These are API details, not domain concepts; disambiguate in code comments.
 
 - **'source'** in OBS context: Can mean either a video source in OBS (what we call **Capture source** here) or Rust module source code. In infrastructure domain docs, always read 'source' as **Capture source** unless in a code/git context.
+
+- **'Non-fatal degradation'** is NOT universal — it is correct only for non-safety adapters (TTS, waybar, now-playing), where silently disabling on dependency loss is a feature. The **Privacy pair** is explicitly EXEMPT: there, the same silence is the vulnerability (a deleted blur filter would let secrets leak unnoticed), so it uses **Blur-time verification** (fail-loud) instead of degrading quietly. When 'Non-fatal degradation' is invoked, confirm the feature is not safety-critical.
 
 - **'TTS'** vs **'TTS Worker'**: 'TTS' in comments can mean the **ElevenLabs** service itself or the local **TTS Worker** task. Use **'TTS'** for the external service, **'TTS Worker'** for our async task handling synthesis + playback.
 
