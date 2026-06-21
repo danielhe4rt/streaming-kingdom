@@ -13,6 +13,7 @@ pub fn router(state: OverlayState) -> Router {
     Router::new()
         .route("/overlay/feed", get(controllers::feed))
         .route("/overlay/coworking", get(controllers::coworking))
+        .route("/overlay/voice", get(controllers::voice))
         // Dev-only fake event emitter (localhost). See http::dev.
         .route("/overlay/dev", get(dev::panel))
         .route("/overlay/dev/event/voiceRoster", get(dev::voice_roster))

@@ -80,6 +80,29 @@ async fn coworking_overlay_serves_embedded_page() {
 }
 
 #[tokio::test]
+async fn voice_overlay_serves_embedded_page() {
+    let server = boot_server().await;
+    let addr = server.addr;
+
+    // The standalone voice dock is the same embedded bundle as coworking; the
+    // frontend picks the overlay by URL path, so this route just serves the SPA.
+    let response = reqwest::get(format!("http://{addr}/overlay/voice"))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 200, "voice overlay should return 200");
+
+    let body = response.text().await.unwrap();
+    assert!(
+        body.contains("<div id=\"root\">"),
+        "page should mount React root"
+    );
+    assert!(
+        body.contains("/overlay/assets/"),
+        "page should reference the embedded asset bundle, got: {body}"
+    );
+}
+
+#[tokio::test]
 async fn feed_streams_chat_message_as_dto() {
     let server = boot_server().await;
     let (addr, chat_tx) = (server.addr, server.chat_tx);

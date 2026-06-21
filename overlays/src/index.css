@@ -135,3 +135,28 @@ body,
     opacity: 1;
   }
 }
+
+/* Voice dock: the card slides in from the right with a soft overshoot... */
+@keyframes sbIn {
+  from {
+    transform: translateX(12px) scale(0.96);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0) scale(1);
+    opacity: 1;
+  }
+}
+
+/* ...and a member's green speak-ring pulses while they are talking. */
+@keyframes speakRing {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.35;
+  }
+}

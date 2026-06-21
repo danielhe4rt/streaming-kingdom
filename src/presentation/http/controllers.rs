@@ -89,6 +89,14 @@ pub async fn coworking() -> Html<&'static str> {
     Html(assets::index_html())
 }
 
+/// `GET /overlay/voice` — the standalone Discord voice-dock page. Serves the same
+/// embedded bundle as `coworking`; `main.tsx` picks the overlay by URL path. It
+/// is transparent and self-contained, so it works as its own OBS browser source
+/// or inside an `<iframe>` on any page.
+pub async fn voice() -> Html<&'static str> {
+    Html(assets::index_html())
+}
+
 /// `GET /overlay/assets/{*path}` — embedded JS/CSS for the Overlay bundle.
 pub async fn asset(Path(path): Path<String>) -> Response {
     match assets::asset(&format!("assets/{path}")) {

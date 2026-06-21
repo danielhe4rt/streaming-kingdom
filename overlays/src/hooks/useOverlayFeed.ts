@@ -21,12 +21,15 @@ import {
   type VoiceRosterDto,
 } from "../feed";
 
+// Handlers are optional so a single-concern overlay (e.g. the standalone voice
+// dock) can subscribe to just the frames it cares about. Unhandled kinds are
+// silently ignored.
 export interface OverlayFeedHandlers {
-  onChatMessage(dto: ChatMessageDto): void;
-  onChatDeleted(msgId: string): void;
-  onStreamEvent(dto: StreamEventDto): void;
-  onNowPlaying(dto: NowPlayingDto): void;
-  onVoiceRoster(dto: VoiceRosterDto): void;
+  onChatMessage?(dto: ChatMessageDto): void;
+  onChatDeleted?(msgId: string): void;
+  onStreamEvent?(dto: StreamEventDto): void;
+  onNowPlaying?(dto: NowPlayingDto): void;
+  onVoiceRoster?(dto: VoiceRosterDto): void;
 }
 
 export function useOverlayFeed(handlers: OverlayFeedHandlers): void {
@@ -50,19 +53,19 @@ export function useOverlayFeed(handlers: OverlayFeedHandlers): void {
       const h = handlersRef.current;
       switch (dto.kind) {
         case "chatMessage":
-          h.onChatMessage(dto);
+          h.onChatMessage?.(dto);
           break;
         case "chatMessageDeleted":
-          h.onChatDeleted(dto.msgId);
+          h.onChatDeleted?.(dto.msgId);
           break;
         case "streamEvent":
-          h.onStreamEvent(dto);
+          h.onStreamEvent?.(dto);
           break;
         case "nowPlaying":
-          h.onNowPlaying(dto);
+          h.onNowPlaying?.(dto);
           break;
         case "voiceRoster":
-          h.onVoiceRoster(dto);
+          h.onVoiceRoster?.(dto);
           break;
       }
     };

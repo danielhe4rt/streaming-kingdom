@@ -6,6 +6,7 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OverlayId {
     Coworking,
+    Voice,
 }
 
 /// Static description of one Overlay: its display name and OBS browser-source path.
@@ -18,11 +19,18 @@ pub struct OverlayDef {
 }
 
 impl OverlayId {
-    pub const ALL: [OverlayDef; 1] = [OverlayDef {
-        id: OverlayId::Coworking,
-        name: "Coworking",
-        path: "/overlay/coworking",
-    }];
+    pub const ALL: [OverlayDef; 2] = [
+        OverlayDef {
+            id: OverlayId::Coworking,
+            name: "Coworking",
+            path: "/overlay/coworking",
+        },
+        OverlayDef {
+            id: OverlayId::Voice,
+            name: "Voice",
+            path: "/overlay/voice",
+        },
+    ];
 
     pub fn def(self) -> &'static OverlayDef {
         OverlayId::ALL

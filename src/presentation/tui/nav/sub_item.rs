@@ -73,13 +73,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn overlays_sub_nav_lists_all_coworking_feed() {
+    fn overlays_sub_nav_lists_all_overlays_then_feed_then_test_events() {
         let items = sub_items(Section::Overlays);
         assert_eq!(items[0], SubItem::AllOverlays);
         assert_eq!(items[1], SubItem::Overlay(OverlayId::Coworking));
-        assert_eq!(items[2], SubItem::Feed);
-        assert_eq!(items[3], SubItem::TestEvents);
-        assert_eq!(items.len(), 4);
+        assert_eq!(items[2], SubItem::Overlay(OverlayId::Voice));
+        assert_eq!(items[3], SubItem::Feed);
+        assert_eq!(items[4], SubItem::TestEvents);
+        assert_eq!(items.len(), 5);
     }
 
     #[test]

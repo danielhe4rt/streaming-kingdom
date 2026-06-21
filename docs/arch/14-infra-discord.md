@@ -110,3 +110,5 @@ A **Discord** row with a status dot reflects `DiscordStatus`: `Stopped` / `Runni
 **Renderer fragility:** `inject.js` reads Discord's webpack stores via Vencord; a large Discord web update can change store shapes and require a tweak. The captured shapes today: voice state `{ userId, mute, deaf, selfMute, selfDeaf }`, speaking `{ userId, speakingFlags, context }`.
 
 **Synthetic testing:** `GET /overlay/dev/event/voiceRoster` pushes a fake roster through the feed with no Discord at all — build/iterate the overlay widget without Vesktop.
+
+**Where the roster surfaces:** two overlays consume the same `voiceRoster` feed — the Coworking overlay's inline roster widget, and the standalone, transparent **`/overlay/voice`** dock (the "N NA SALA" card; its own OBS browser source or an embeddable `<iframe>`, layout via `?layout=row|col`). Both are fed by this adapter and are independent of each other.
