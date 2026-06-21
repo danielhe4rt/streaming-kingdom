@@ -19,6 +19,6 @@ mod section;
 mod sub_item;
 
 pub use nav_state::NavState;
-pub use overlay::{overlay_url, OverlayDef, OverlayId};
+pub use overlay::{OverlayDef, OverlayId, overlay_url};
 pub use section::Section;
-pub use sub_item::{default_sub, sub_items, sub_label, SubItem};
+pub use sub_item::{SubItem, default_sub, sub_items, sub_label};

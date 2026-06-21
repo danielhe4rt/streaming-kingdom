@@ -86,7 +86,12 @@ pub async fn run(
     mut now_playing_rx: watch::Receiver<Option<NowPlaying>>,
 ) -> io::Result<()> {
     let mut terminal = init_terminal()?;
-    let mut tui = TuiState::new(event_log_config, twitch_channel, tts_available, overlays_port);
+    let mut tui = TuiState::new(
+        event_log_config,
+        twitch_channel,
+        tts_available,
+        overlays_port,
+    );
     let mut event_rx = app.subscribe_events();
     let mut chat_rx = app.subscribe_chat();
     let cmd_tx = app.command_sender();

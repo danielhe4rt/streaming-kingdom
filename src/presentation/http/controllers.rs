@@ -10,9 +10,9 @@ use axum::response::{Html, IntoResponse, Response};
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::{BroadcastStream, WatchStream};
 
+use super::OverlayState;
 use super::assets;
 use super::resources::FeedEvent;
-use super::OverlayState;
 
 /// `GET /overlay/feed` — the Overlay Feed: one SSE stream carrying enriched chat
 /// plus stream events, each as the M3 [`FeedEvent`] DTO.
@@ -33,10 +33,11 @@ pub async fn feed(State(state): State<OverlayState>) -> Response {
         Err(_) => None,
     });
 
-    let events = BroadcastStream::new(state.event_tx.subscribe()).filter_map(|result| match result {
-        Ok(event) => Some(FeedEvent::stream(&event)),
-        Err(_) => None,
-    });
+    let events =
+        BroadcastStream::new(state.event_tx.subscribe()).filter_map(|result| match result {
+            Ok(event) => Some(FeedEvent::stream(&event)),
+            Err(_) => None,
+        });
 
     // Ambient now-playing state: WatchStream emits the current value first (so a
     // new connection immediately sees the track), then each subsequent change.
@@ -77,11 +78,7 @@ pub async fn feed(State(state): State<OverlayState>) -> Response {
 
     // Allow the Vite dev server (separate origin) to read the feed in dev; the
     // embedded build is same-origin so this is a harmless no-op there.
-    (
-        [(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")],
-        sse,
-    )
-        .into_response()
+    ([(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")], sse).into_response()
 }
 
 /// `GET /overlay/coworking` — the single full-screen Coworking Overlay page

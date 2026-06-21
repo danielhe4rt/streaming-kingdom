@@ -1,7 +1,7 @@
 //! Chat — enriched messages received from a Twitch IRC channel, sliced by concern.
 //!
 //! - [`emote`] — body fragments + native emote references and CDN urls
-//! - [`badge`] — chat badges and parsing the IRC `badges` tag
+//! - [`badge`] — chat badges (the `set`/`version` pairs an author wears)
 //! - [`message`] — the `ChatMessage` value and its text-only shaping path
 //! - [`fragment_split`] — interleaving text runs and emotes into an ordered body
 //! - [`moderation`] — single-message delete signals + the broadcast envelope
@@ -13,7 +13,7 @@ mod message;
 mod moderation;
 
 pub use badge::ChatBadge;
-pub use emote::{emote_cdn_url, EmoteSpan, MessageFragment};
+pub use emote::{EmoteSpan, MessageFragment, emote_cdn_url};
 pub use message::ChatMessage;
 pub use moderation::{ChatMessageDeleted, ChatSignal};
 

@@ -12,7 +12,7 @@ public API is unchanged — every type is still re-exported from `crate::domain`
 |------|---------|
 | `chat/mod.rs` | Module wiring, re-exports, `DEFAULT_CHAT_COLOR` |
 | `chat/emote.rs` | `MessageFragment`, `EmoteSpan`, `emote_cdn_url` — body fragments + emote CDN urls |
-| `chat/badge.rs` | `ChatBadge` and `ChatMessage::parse_badges` (the IRC `badges` tag) |
+| `chat/badge.rs` | `ChatBadge` — the `set`/`version` pair an author wears (its CDN url is resolved later) |
 | `chat/message.rs` | The `ChatMessage` value + text-only path (`from_text`, `with_badges`, `plain_text`) |
 | `chat/fragment_split.rs` | `ChatMessage::from_fragments` / `split_fragments` — interleaving text + emotes (tests in `chat/fragment_split/tests.rs`) |
 | `chat/moderation.rs` | `ChatMessageDeleted`, `ChatSignal` — delete signals + broadcast envelope |

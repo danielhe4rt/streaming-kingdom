@@ -2,7 +2,7 @@
 //! splicing the IRC emote spans into an ordered fragment list.
 
 use super::message::resolve_color;
-use super::{emote_cdn_url, ChatMessage, EmoteSpan, MessageFragment};
+use super::{ChatMessage, EmoteSpan, MessageFragment, emote_cdn_url};
 
 impl ChatMessage {
     /// Shape a [`ChatMessage`] whose body interleaves text runs and native

@@ -10,13 +10,8 @@ use crate::domain::{ChatBadge, ChatMessage, ChatMessageDeleted, MessageFragment}
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum FragmentDto {
-    Text {
-        text: String,
-    },
-    Emote {
-        id: String,
-        url: String,
-    },
+    Text { text: String },
+    Emote { id: String, url: String },
 }
 
 impl From<&MessageFragment> for FragmentDto {

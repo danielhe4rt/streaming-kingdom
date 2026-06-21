@@ -33,7 +33,10 @@ fn voice_roster_serializes_to_feed_contract() {
     let member = &value["members"][0];
     assert_eq!(member["userId"], "42");
     assert_eq!(member["displayName"], "nina");
-    assert_eq!(member["avatarUrl"], "https://cdn.discordapp.com/avatars/42/abc.png");
+    assert_eq!(
+        member["avatarUrl"],
+        "https://cdn.discordapp.com/avatars/42/abc.png"
+    );
     assert_eq!(member["speaking"], true);
     assert_eq!(member["selfMute"], false);
     assert_eq!(member["selfDeaf"], false);
@@ -51,8 +54,14 @@ fn voice_roster_cleared_has_null_channel_and_empty_members() {
         serde_json::to_value(FeedEvent::voice_roster(&VoiceRoster::default())).unwrap();
 
     assert_eq!(value["kind"], "voiceRoster");
-    assert!(value["channelId"].is_null(), "no channel serializes as null");
-    assert!(value["channelName"].is_null(), "no channel serializes as null");
+    assert!(
+        value["channelId"].is_null(),
+        "no channel serializes as null"
+    );
+    assert!(
+        value["channelName"].is_null(),
+        "no channel serializes as null"
+    );
     assert_eq!(value["members"].as_array().unwrap().len(), 0);
 }
 
@@ -76,7 +85,10 @@ fn voice_member_without_avatar_serializes_null() {
     }))
     .unwrap();
     let member = &value["members"][0];
-    assert!(member["avatarUrl"].is_null(), "no avatar serializes as null");
+    assert!(
+        member["avatarUrl"].is_null(),
+        "no avatar serializes as null"
+    );
     assert_eq!(member["selfMute"], true);
     assert_eq!(member["selfDeaf"], true);
 }

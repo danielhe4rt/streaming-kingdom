@@ -21,7 +21,9 @@ pub fn make_block(title: &str, focused: bool) -> Block<'static> {
     Block::default()
         .title(Line::from(Span::styled(
             format!(" {title} "),
-            Style::default().fg(COLOR_ACCENT).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(COLOR_ACCENT)
+                .add_modifier(Modifier::BOLD),
         )))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
@@ -33,7 +35,9 @@ pub fn make_block(title: &str, focused: bool) -> Block<'static> {
 pub fn section_label(label: &str) -> Line<'static> {
     Line::from(Span::styled(
         format!(" ▸ {} ", label.to_uppercase()),
-        Style::default().fg(COLOR_ACCENT).add_modifier(Modifier::BOLD),
+        Style::default()
+            .fg(COLOR_ACCENT)
+            .add_modifier(Modifier::BOLD),
     ))
 }
 
@@ -47,7 +51,11 @@ pub fn kv(key: &str, value: &str) -> Line<'static> {
 
 /// Resolve the status dot + colour + short status text for a Service, reading
 /// live status from `TuiState`/`AppState`. Pure formatting, registry-driven.
-pub fn service_status(def: &ServiceDef, app: &AppState, tui: &TuiState) -> (&'static str, Color, String) {
+pub fn service_status(
+    def: &ServiceDef,
+    app: &AppState,
+    tui: &TuiState,
+) -> (&'static str, Color, String) {
     match def.id {
         ServiceId::TwitchEventSub => {
             if tui.twitch_eventsub.connected {
@@ -68,7 +76,11 @@ pub fn service_status(def: &ServiceDef, app: &AppState, tui: &TuiState) -> (&'st
         }
         ServiceId::TwitchChat => {
             if tui.twitch_chat.connected {
-                ("●", COLOR_CONNECTED, format!("Connected · {} msgs", tui.twitch_chat.message_count))
+                (
+                    "●",
+                    COLOR_CONNECTED,
+                    format!("Connected · {} msgs", tui.twitch_chat.message_count),
+                )
             } else {
                 ("○", COLOR_INACTIVE, "Disconnected".into())
             }
@@ -81,8 +93,12 @@ pub fn service_status(def: &ServiceDef, app: &AppState, tui: &TuiState) -> (&'st
                 Some(np) => {
                     let track = format!("{} — {}", np.title, np.artist);
                     match np.status {
-                        PlaybackStatus::Playing => ("●", COLOR_CONNECTED, format!("Playing · {track}")),
-                        PlaybackStatus::Paused => ("●", COLOR_STARTING, format!("Paused · {track}")),
+                        PlaybackStatus::Playing => {
+                            ("●", COLOR_CONNECTED, format!("Playing · {track}"))
+                        }
+                        PlaybackStatus::Paused => {
+                            ("●", COLOR_STARTING, format!("Paused · {track}"))
+                        }
                         // Defensive: the observer clears to None on Stopped, but
                         // render a sensible state if a Stopped value ever arrives.
                         PlaybackStatus::Stopped => ("○", COLOR_INACTIVE, "Nothing playing".into()),
@@ -111,7 +127,11 @@ pub fn service_status(def: &ServiceDef, app: &AppState, tui: &TuiState) -> (&'st
         }
         ServiceId::Hyprland => {
             if tui.hyprland.listening {
-                ("●", COLOR_CONNECTED, format!("Listening · {} events", tui.hyprland.event_count))
+                (
+                    "●",
+                    COLOR_CONNECTED,
+                    format!("Listening · {} events", tui.hyprland.event_count),
+                )
             } else {
                 ("○", COLOR_INACTIVE, "Inactive".into())
             }
@@ -142,7 +162,11 @@ pub fn service_status(def: &ServiceDef, app: &AppState, tui: &TuiState) -> (&'st
         }
         ServiceId::Overlays => {
             if tui.overlays.running {
-                ("●", COLOR_CONNECTED, format!("Serving :{}", tui.overlays.port))
+                (
+                    "●",
+                    COLOR_CONNECTED,
+                    format!("Serving :{}", tui.overlays.port),
+                )
             } else if app.overlays_enabled {
                 ("●", COLOR_STARTING, "Starting…".into())
             } else {
@@ -165,14 +189,21 @@ pub fn service_status(def: &ServiceDef, app: &AppState, tui: &TuiState) -> (&'st
 }
 
 /// One Service row as a TUI line: cursor, status dot, name, kind tag, toggle.
-pub fn service_line(def: &ServiceDef, app: &AppState, tui: &TuiState, selected: bool) -> Line<'static> {
+pub fn service_line(
+    def: &ServiceDef,
+    app: &AppState,
+    tui: &TuiState,
+    selected: bool,
+) -> Line<'static> {
     let (dot, dot_color, status) = service_status(def, app, tui);
 
     // Selection affordance: a bright-purple left bar + bold purple name.
     let (marker, name_style) = if selected {
         (
             "▌ ",
-            Style::default().fg(COLOR_PRIMARY).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(COLOR_PRIMARY)
+                .add_modifier(Modifier::BOLD),
         )
     } else {
         ("  ", Style::default().add_modifier(Modifier::BOLD))
@@ -305,25 +336,21 @@ pub fn format_app_event(entry: &AppEventEntry) -> Line<'static> {
         AppEvent::WaybarSpawned => ("▶", COLOR_INFO, "Waybar started".into()),
         AppEvent::WaybarKilled => ("■", COLOR_TOGGLE_OFF, "Waybar stopped".into()),
         AppEvent::WaybarError(msg) => ("✖", COLOR_ERROR, msg.to_string()),
-        AppEvent::AlertsBrowserOpened => ("▶", COLOR_INFO, "Alerts browser opened".into()),
-        AppEvent::AlertsBrowserClosed => ("■", COLOR_TOGGLE_OFF, "Alerts browser closed".into()),
         AppEvent::Info(msg) => ("ℹ", COLOR_INFO, msg.clone()),
         AppEvent::Error(msg) => ("✖", COLOR_ERROR, msg.clone()),
 
-        AppEvent::WindowOpened { title, .. } => {
-            ("＋", COLOR_WINDOW_OPEN, format!("Window: {title}"))
-        }
+        AppEvent::WindowOpened { title } => ("＋", COLOR_WINDOW_OPEN, format!("Window: {title}")),
         AppEvent::WindowClosed { address } => (
             "✕",
             COLOR_WINDOW_CLOSE,
             format!("Window closed: {}", &address[..address.len().min(8)]),
         ),
-        AppEvent::WindowTitleChanged { title, .. } => {
+        AppEvent::WindowTitleChanged { title } => {
             ("↔", COLOR_TITLE_CHANGE, format!("Title: {title}"))
         }
         AppEvent::WorkspaceChanged { name } => ("⊞", COLOR_WORKSPACE, format!("Workspace: {name}")),
         AppEvent::MonitorFocused { monitor } => ("◉", COLOR_MONITOR, format!("Monitor: {monitor}")),
-        AppEvent::WindowMoved { workspace, .. } => {
+        AppEvent::WindowMoved { workspace } => {
             ("↔", COLOR_INFO, format!("Window moved to {workspace}"))
         }
 

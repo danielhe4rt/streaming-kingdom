@@ -53,9 +53,7 @@ pub(super) async fn teardown_blur(
     capture_source: &str,
     blur_active: bool,
 ) {
-    if blur_active
-        && let Some(client) = obs_client
-    {
+    if blur_active && let Some(client) = obs_client {
         obs::disable_blur(client, capture_source).await;
     }
 }

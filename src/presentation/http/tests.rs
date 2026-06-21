@@ -15,7 +15,7 @@ use crate::domain::{
     StreamEvent,
 };
 
-use super::{routes, OverlayState};
+use super::{OverlayState, routes};
 
 struct TestServer {
     addr: std::net::SocketAddr,
@@ -61,11 +61,18 @@ async fn coworking_overlay_serves_embedded_page() {
     let response = reqwest::get(format!("http://{addr}/overlay/coworking"))
         .await
         .unwrap();
-    assert_eq!(response.status(), 200, "coworking overlay should return 200");
+    assert_eq!(
+        response.status(),
+        200,
+        "coworking overlay should return 200"
+    );
 
     let body = response.text().await.unwrap();
 
-    assert!(body.contains("<div id=\"root\">"), "page should mount React root");
+    assert!(
+        body.contains("<div id=\"root\">"),
+        "page should mount React root"
+    );
     assert!(
         body.contains("/overlay/assets/"),
         "page should reference the embedded asset bundle, got: {body}"
@@ -123,14 +130,20 @@ async fn feed_streams_chat_message_as_dto() {
     .await;
 
     assert!(read.is_ok(), "timed out waiting for SSE frame; got: {acc}");
-    assert!(acc.contains("data:"), "expected an SSE data frame, got: {acc}");
+    assert!(
+        acc.contains("data:"),
+        "expected an SSE data frame, got: {acc}"
+    );
     assert!(acc.contains("\"kind\":\"chatMessage\""), "got: {acc}");
     assert!(acc.contains("\"msgId\":\"msg-42\""), "got: {acc}");
     assert!(acc.contains("\"color\":\"#FF7F50\""), "got: {acc}");
     assert!(acc.contains("hello overlay"), "got: {acc}");
     // The resolved badge url rides along on the feed DTO.
     assert!(acc.contains("\"setId\":\"moderator\""), "got: {acc}");
-    assert!(acc.contains("\"url\":\"https://cdn/mod.png\""), "got: {acc}");
+    assert!(
+        acc.contains("\"url\":\"https://cdn/mod.png\""),
+        "got: {acc}"
+    );
 }
 
 #[tokio::test]
@@ -187,7 +200,10 @@ async fn feed_carries_ordered_emote_fragments() {
     // The text run precedes the emote in the serialized fragment array.
     let text_at = acc.find("\"kind\":\"text\"").unwrap();
     let emote_at = acc.find("\"kind\":\"emote\"").unwrap();
-    assert!(text_at < emote_at, "text fragment should precede emote; got: {acc}");
+    assert!(
+        text_at < emote_at,
+        "text fragment should precede emote; got: {acc}"
+    );
 }
 
 #[tokio::test]
@@ -227,7 +243,10 @@ async fn feed_streams_single_message_delete_as_dto() {
     .await;
 
     assert!(read.is_ok(), "timed out waiting for SSE frame; got: {acc}");
-    assert!(acc.contains("data:"), "expected an SSE data frame, got: {acc}");
+    assert!(
+        acc.contains("data:"),
+        "expected an SSE data frame, got: {acc}"
+    );
     assert!(
         acc.contains("\"kind\":\"chatMessageDeleted\""),
         "got: {acc}"
@@ -276,7 +295,10 @@ async fn feed_streams_stream_event_as_dto() {
     .await;
 
     assert!(read.is_ok(), "timed out waiting for SSE frame; got: {acc}");
-    assert!(acc.contains("data:"), "expected an SSE data frame, got: {acc}");
+    assert!(
+        acc.contains("data:"),
+        "expected an SSE data frame, got: {acc}"
+    );
     // The outer `kind` selects the stream-event branch; the inner `type` (the
     // flattened domain discriminant) selects the Alert template.
     assert!(acc.contains("\"kind\":\"streamEvent\""), "got: {acc}");
@@ -330,7 +352,10 @@ async fn feed_streams_now_playing_as_dto() {
     .await;
 
     assert!(read.is_ok(), "timed out waiting for SSE frame; got: {acc}");
-    assert!(acc.contains("data:"), "expected an SSE data frame, got: {acc}");
+    assert!(
+        acc.contains("data:"),
+        "expected an SSE data frame, got: {acc}"
+    );
     assert!(acc.contains("\"kind\":\"nowPlaying\""), "got: {acc}");
     assert!(acc.contains("\"title\":\"Money\""), "got: {acc}");
     assert!(acc.contains("\"artist\":\"Pink Floyd\""), "got: {acc}");
@@ -352,7 +377,10 @@ async fn dev_panel_serves_control_page() {
     assert_eq!(response.status(), 200, "dev panel should return 200");
 
     let body = response.text().await.unwrap();
-    assert!(body.contains("Overlay Dev"), "panel should render, got: {body}");
+    assert!(
+        body.contains("Overlay Dev"),
+        "panel should render, got: {body}"
+    );
     assert!(
         body.contains("/overlay/dev/event/"),
         "panel should wire the emit routes, got: {body}"
@@ -395,7 +423,10 @@ async fn dev_event_route_injects_into_feed() {
     })
     .await;
 
-    assert!(read.is_ok(), "timed out waiting for the injected event; got: {acc}");
+    assert!(
+        read.is_ok(),
+        "timed out waiting for the injected event; got: {acc}"
+    );
     assert!(acc.contains("\"kind\":\"streamEvent\""), "got: {acc}");
     assert!(acc.contains("\"type\":\"donation\""), "got: {acc}");
 }

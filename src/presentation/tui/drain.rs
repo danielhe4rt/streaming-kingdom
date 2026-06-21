@@ -144,9 +144,9 @@ pub fn livepix_status(
             LivepixStatus::OAuthError(msg) => {
                 app.log_event(AppEvent::LivepixError(format!("OAuth failed: {msg}")))
             }
-            LivepixStatus::WebhookReceived { username, amount } => {
-                app.log_event(AppEvent::LivepixInfo(format!("{username} donated {amount}")))
-            }
+            LivepixStatus::WebhookReceived { username, amount } => app.log_event(
+                AppEvent::LivepixInfo(format!("{username} donated {amount}")),
+            ),
             LivepixStatus::Error(msg) => app.log_event(AppEvent::LivepixError(msg.clone())),
         }
     }
@@ -221,7 +221,9 @@ pub fn discord_status(
 
         match status {
             DiscordStatus::Stopped => app.log_event(AppEvent::Info("Discord stopped".into())),
-            DiscordStatus::Activity(msg) => app.log_event(AppEvent::Info(format!("Discord: {msg}"))),
+            DiscordStatus::Activity(msg) => {
+                app.log_event(AppEvent::Info(format!("Discord: {msg}")))
+            }
             DiscordStatus::Running { channel } => {
                 let msg = match channel.as_deref() {
                     Some(c) => format!("Discord connected · #{c}"),
@@ -255,7 +257,8 @@ pub fn twitch_events(app: &mut AppState, tui: &mut TuiState, rx: &mut mpsc::Rece
         match &ev {
             AppEvent::Info(msg) => {
                 let lower = msg.to_lowercase();
-                if lower.contains("connected to eventsub") || lower.contains("eventsub connecting") {
+                if lower.contains("connected to eventsub") || lower.contains("eventsub connecting")
+                {
                     tui.twitch_eventsub.connected = true;
                 }
                 if lower.contains("session established") || lower.contains("welcome") {
@@ -270,7 +273,8 @@ pub fn twitch_events(app: &mut AppState, tui: &mut TuiState, rx: &mut mpsc::Rece
             }
             AppEvent::Error(msg) => {
                 let lower = msg.to_lowercase();
-                if lower.contains("twitch chat disconnected") || lower.contains("twitch chat failed")
+                if lower.contains("twitch chat disconnected")
+                    || lower.contains("twitch chat failed")
                 {
                     tui.twitch_chat.connected = false;
                 } else if lower.contains("disconnected") || lower.contains("timeout") {
@@ -290,7 +294,11 @@ pub fn twitch_events(app: &mut AppState, tui: &mut TuiState, rx: &mut mpsc::Rece
 // Chat signals (broadcast<ChatSignal>) — terminal chat view preserved
 // ---------------------------------------------------------------------------
 
-pub fn chat_signals(app: &mut AppState, tui: &mut TuiState, rx: &mut broadcast::Receiver<ChatSignal>) {
+pub fn chat_signals(
+    app: &mut AppState,
+    tui: &mut TuiState,
+    rx: &mut broadcast::Receiver<ChatSignal>,
+) {
     while let Ok(signal) = rx.try_recv() {
         match signal {
             ChatSignal::Message(msg) => {

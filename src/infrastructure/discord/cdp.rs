@@ -74,7 +74,9 @@ async fn inject_once(cdp_port: u16, payload: &str) -> io::Result<String> {
         "method": "Runtime.evaluate",
         "params": { "expression": payload, "returnByValue": true, "awaitPromise": true },
     });
-    ws.send(Message::Text(cmd.to_string().into())).await.map_err(io::Error::other)?;
+    ws.send(Message::Text(cmd.to_string().into()))
+        .await
+        .map_err(io::Error::other)?;
 
     while let Some(frame) = ws.next().await {
         let text = match frame.map_err(io::Error::other)? {
@@ -87,7 +89,10 @@ async fn inject_once(cdp_port: u16, payload: &str) -> io::Result<String> {
             return Ok(result.unwrap_or("evaluated").to_string());
         }
     }
-    Err(io::Error::new(io::ErrorKind::UnexpectedEof, "CDP closed before reply"))
+    Err(io::Error::new(
+        io::ErrorKind::UnexpectedEof,
+        "CDP closed before reply",
+    ))
 }
 
 /// GET `/json/list` and return the WebSocket debugger URL of the Discord page.
@@ -105,7 +110,9 @@ async fn discord_target(cdp_port: u16) -> io::Result<String> {
         .iter()
         .find(|t| {
             t.get("type").and_then(Value::as_str) == Some("page")
-                && t.get("url").and_then(Value::as_str).is_some_and(|u| u.contains("discord.com"))
+                && t.get("url")
+                    .and_then(Value::as_str)
+                    .is_some_and(|u| u.contains("discord.com"))
         })
         .and_then(|t| t.get("webSocketDebuggerUrl").and_then(Value::as_str))
         .map(str::to_string)

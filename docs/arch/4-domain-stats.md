@@ -16,7 +16,7 @@ A mutable struct holding three running counters that summarize a stream session:
 - **`followers_today: u32`** — total follows received since the session started (incremented by `Follow` events).
 - **`subs_today: u32`** — total subscriptions received since the session started (both regular `Sub` and `GiftSub` events increment this counter).
 
-Created by `StreamStats::new()` in the `AppState` constructor when a toolkit session initializes (see `src/application/state.rs:56`). The `StreamStats` instance is stored in `AppState` and is mutated whenever the application's `dispatch_event()` method processes an incoming `StreamEvent`.
+Created by `StreamStats::new()` in the `AppState` constructor when a toolkit session initializes (see `src/application/state.rs`). The `StreamStats` instance is stored in `AppState` and is mutated by `StreamStats::record()`, which the TUI run loop calls in `drain::stream_events()` (`src/presentation/tui/drain.rs`) as it drains the `StreamEvent` broadcast.
 
 ---
 
@@ -27,14 +27,14 @@ Created by `StreamStats::new()` in the `AppState` constructor when a toolkit ses
 The primary flow is **event-driven mutation**:
 
 1. **Infrastructure layer** (Twitch IRC, EventSub) receives a raw platform event.
-2. **Application layer** converts it to a domain `StreamEvent` and calls `AppState::dispatch_event()`.
-3. **Inside `dispatch_event()`** (line 75–80, `src/application/state.rs`):
-   - `self.stats.record(&event)` is called, which pattern-matches the event type.
+2. **The producer** (EventSub message handler, Livepix webhook) converts it to a domain `StreamEvent` and sends it on the `event_tx` broadcast.
+3. **The TUI run loop** drains it in `drain::stream_events()` (`src/presentation/tui/drain.rs`):
+   - `app.stats.record(&ev)` is called, which pattern-matches the event type.
    - **`StreamEvent::Follow { .. }`** → `followers_today += 1`
    - **`StreamEvent::Sub { .. }` or `StreamEvent::GiftSub { .. }`** → `subs_today += 1`
    - **`StreamEvent::ViewerCountUpdate { count }`** → `viewer_count = count` (overwrites, not increments)
    - **Other events** (`Donation`, `Cheer`, `Raid`) → ignored (no stat impact)
-4. The event is also logged to the unified event log and broadcast to all subscribers.
+4. The same drain call also logs `AppEvent::Stream(...)` into the unified event log; other broadcast consumers (Waybar writer, Overlay feed) receive the event independently.
 5. Any UI module (TUI, Waybar) observing the event log or subscribing to the event broadcast will receive the update and can display the new stat values.
 
 **Data flow diagram:**
@@ -42,7 +42,7 @@ The primary flow is **event-driven mutation**:
 ```
 Stream Event (Follow, Sub, GiftSub, ViewerCountUpdate)
        ↓
-AppState::dispatch_event(event)
+drain::stream_events()  (TUI run loop)
        ↓
    StreamStats::record(&event)
        ├─ Follow event?          → followers_today += 1

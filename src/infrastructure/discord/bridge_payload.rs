@@ -52,7 +52,11 @@ impl BridgeSnapshot {
         VoiceRoster {
             channel_id: self.channel_id,
             channel_name: self.channel_name,
-            members: self.members.into_iter().map(BridgeMember::into_member).collect(),
+            members: self
+                .members
+                .into_iter()
+                .map(BridgeMember::into_member)
+                .collect(),
         }
     }
 }

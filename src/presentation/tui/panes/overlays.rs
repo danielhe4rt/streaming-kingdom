@@ -42,7 +42,9 @@ pub fn draw_all(frame: &mut Frame, area: Rect, app: &AppState, tui: &TuiState) {
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
         "  RECENT ON FEED",
-        Style::default().fg(COLOR_MUTED).add_modifier(Modifier::BOLD),
+        Style::default()
+            .fg(COLOR_MUTED)
+            .add_modifier(Modifier::BOLD),
     )));
     if tui.chat_messages.is_empty() {
         lines.push(Line::from(Span::styled(
@@ -163,7 +165,9 @@ pub fn draw_test_events(frame: &mut Frame, area: Rect, tui: &TuiState) {
                 Span::styled("  ▌ ", Style::default().fg(COLOR_ACCENT)),
                 Span::styled(
                     label,
-                    Style::default().fg(COLOR_ACCENT).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(COLOR_ACCENT)
+                        .add_modifier(Modifier::BOLD),
                 ),
             ]));
         } else {
@@ -185,7 +189,9 @@ pub fn draw_test_events(frame: &mut Frame, area: Rect, tui: &TuiState) {
     };
     lines.push(Line::from(Span::styled(
         last,
-        Style::default().fg(COLOR_MUTED).add_modifier(Modifier::ITALIC),
+        Style::default()
+            .fg(COLOR_MUTED)
+            .add_modifier(Modifier::ITALIC),
     )));
 
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), inner);

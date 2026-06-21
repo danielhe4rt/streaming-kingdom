@@ -40,8 +40,8 @@ fn emote_fragment_serializes_with_id_and_url() {
 fn resolved_badges_serialize_and_misses_are_dropped() {
     use crate::domain::ChatBadge;
 
-    let msg = ChatMessage::from_text("b-1", "moduser", Some("#fff"), "rustlang", "hi")
-        .with_badges(vec![
+    let msg =
+        ChatMessage::from_text("b-1", "moduser", Some("#fff"), "rustlang", "hi").with_badges(vec![
             ChatBadge {
                 set: "moderator".into(),
                 version: "1".into(),
@@ -96,7 +96,10 @@ fn delete_to_json_emits_kind_and_msg_id() {
     use crate::domain::ChatMessageDeleted;
 
     let json = FeedEvent::deleted(&ChatMessageDeleted::new("del-1")).to_json();
-    assert!(json.contains("\"kind\":\"chatMessageDeleted\""), "got: {json}");
+    assert!(
+        json.contains("\"kind\":\"chatMessageDeleted\""),
+        "got: {json}"
+    );
     assert!(json.contains("\"msgId\":\"del-1\""), "got: {json}");
 }
 

@@ -64,7 +64,7 @@ The module exposes four public async/sync functions:
 - `write_data_file(path, events)` — Serializes the event list to JSON and writes to disk.
 
 **`style.rs`** — Manages CSS styling:
-- `add_stream_css()` — Appends (or would append) CSS rules to `~/.config/waybar/style.css`. Currently marked as a no-op (commented out) in the implementation.
+- `add_stream_css()` — Intended to append CSS rules to `~/.config/waybar/style.css`, but currently a no-op: it reads the style file (a readability check) and logs, without writing. The CSS-generation helper was removed as dead code.
 - `remove_stream_css()` — Removes the CSS section (bounded by `/* === streams-toolkit: bottom bar === */` and `/* === end streams-toolkit === */` markers) from the style file.
 - CSS scopes all stream bar rules under `window#stream-events` to avoid conflicts with Omarchy's top bar.
 - Defines styles for the "Recent Events" tag (purple background, uppercase, bold) and event list area (monospace font, 14px size, uppercase).
@@ -126,7 +126,7 @@ Embedded in the binary as a const string and written to `~/.config/streams-toolk
 
 1. **JSONC comment stripping**: The config reader (`config.rs`) implements a bespoke JSONC-to-JSON parser to handle `//` and `/* */` comments while respecting quoted string contents. This is necessary because waybar's config is in JSONC format, but `serde_json` expects pure JSON. The parser is careful with escape sequences, but edge cases (e.g., a literal `/*` inside a quoted string) should be tested if waybar config becomes more complex.
 
-2. **`add_stream_css()` is currently a no-op**: The function reads the style file for error checking but does not actually append CSS (the write logic is commented out). This was likely left incomplete. The `remove_stream_css()` function is fully implemented and works. To enable the feature, uncomment the section marked in `style.rs` lines 99–101.
+2. **`add_stream_css()` is currently a no-op**: The function reads the style file for error checking but does not actually append CSS — the write path and its CSS-generation helper were removed as dead code. The `remove_stream_css()` function is fully implemented and works. To enable the feature, a CSS generator and write step would need to be reintroduced in `style.rs`.
 
 3. **Waybar restart dependency**: The integration assumes `omarchy-restart-waybar` is available on the system PATH. If missing or renamed, the restart will fail silently (only logged as a warning). The stream bar config/style will be merged but waybar won't pick it up until manually restarted.
 

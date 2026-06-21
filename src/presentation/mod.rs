@@ -9,4 +9,4 @@ pub mod http;
 pub mod synthetic;
 pub mod tui;
 
-pub use tui::{run, RunChannels};
+pub use tui::{RunChannels, run};

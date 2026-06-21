@@ -28,7 +28,9 @@ mod voice_roster_tests;
 
 use serde::Serialize;
 
-use crate::domain::{ChatMessage, ChatMessageDeleted, ChatSignal, NowPlaying, StreamEvent, VoiceRoster};
+use crate::domain::{
+    ChatMessage, ChatMessageDeleted, ChatSignal, NowPlaying, StreamEvent, VoiceRoster,
+};
 
 pub use chat::{ChatMessageDeletedDto, ChatMessageDto};
 pub use now_playing::NowPlayingDto;

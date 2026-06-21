@@ -24,10 +24,17 @@ fn roster(channel: Option<&str>, members: Vec<VoiceMember>) -> VoiceRoster {
 
 #[test]
 fn first_snapshot_summarizes_the_channel() {
-    let next = roster(Some("1"), vec![member("a", "nina", false), member("b", "bob", false)]);
+    let next = roster(
+        Some("1"),
+        vec![member("a", "nina", false), member("b", "bob", false)],
+    );
     let lines = diff_lines(None, &next, false);
     assert_eq!(lines.len(), 1);
-    assert!(lines[0].contains("#coworking (2)") && lines[0].contains("nina") && lines[0].contains("bob"));
+    assert!(
+        lines[0].contains("#coworking (2)")
+            && lines[0].contains("nina")
+            && lines[0].contains("bob")
+    );
 }
 
 #[test]
@@ -43,7 +50,10 @@ fn channel_change_is_a_single_summary() {
 fn leaving_voice_logs_cleared() {
     let prev = roster(Some("1"), vec![member("a", "nina", false)]);
     let next = roster(None, vec![]);
-    assert_eq!(diff_lines(Some(&prev), &next, true), vec!["← left voice (roster cleared)"]);
+    assert_eq!(
+        diff_lines(Some(&prev), &next, true),
+        vec!["← left voice (roster cleared)"]
+    );
 }
 
 #[test]
@@ -59,8 +69,16 @@ fn join_and_leave_are_diffed() {
 fn speaking_transitions_are_logged_when_enabled() {
     let quiet = roster(Some("1"), vec![member("a", "nina", false)]);
     let talking = roster(Some("1"), vec![member("a", "nina", true)]);
-    assert!(diff_lines(Some(&quiet), &talking, true).iter().any(|l| l.contains("🎤 nina")));
-    assert!(diff_lines(Some(&talking), &quiet, true).iter().any(|l| l.contains("nina stopped")));
+    assert!(
+        diff_lines(Some(&quiet), &talking, true)
+            .iter()
+            .any(|l| l.contains("🎤 nina"))
+    );
+    assert!(
+        diff_lines(Some(&talking), &quiet, true)
+            .iter()
+            .any(|l| l.contains("nina stopped"))
+    );
 }
 
 #[test]

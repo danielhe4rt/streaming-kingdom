@@ -26,12 +26,22 @@ pub fn draw_all(frame: &mut Frame, area: Rect, app: &AppState, tui: &TuiState) {
     let mut lines: Vec<Line> = Vec::new();
     lines.push(format::section_label("Inputs"));
     for def in service::inputs() {
-        lines.push(format::service_line(def, app, tui, selected == Some(def.id)));
+        lines.push(format::service_line(
+            def,
+            app,
+            tui,
+            selected == Some(def.id),
+        ));
     }
     lines.push(Line::from(""));
     lines.push(format::section_label("Outputs"));
     for def in service::outputs() {
-        lines.push(format::service_line(def, app, tui, selected == Some(def.id)));
+        lines.push(format::service_line(
+            def,
+            app,
+            tui,
+            selected == Some(def.id),
+        ));
     }
 
     // Live summary footer. Spotify counts as "live" whenever a track is loaded
@@ -104,7 +114,11 @@ pub fn draw_detail(frame: &mut Frame, area: Rect, id: ServiceId, app: &AppState,
             Span::styled("  Control     ", Style::default().fg(COLOR_MUTED)),
             Span::styled(
                 if enabled { "ON" } else { "OFF" }.to_string(),
-                Style::default().fg(if enabled { COLOR_TOGGLE_ON } else { COLOR_TOGGLE_OFF }),
+                Style::default().fg(if enabled {
+                    COLOR_TOGGLE_ON
+                } else {
+                    COLOR_TOGGLE_OFF
+                }),
             ),
             Span::styled(
                 "  (Space/Enter to toggle)",

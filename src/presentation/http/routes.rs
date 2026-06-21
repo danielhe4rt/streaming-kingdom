@@ -3,9 +3,9 @@
 use axum::Router;
 use axum::routing::get;
 
+use super::OverlayState;
 use super::controllers;
 use super::dev;
-use super::OverlayState;
 
 /// Build the Overlay router. Kept separate from the server bootstrap so tests
 /// can boot the exact same routes without binding a socket.

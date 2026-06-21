@@ -34,9 +34,7 @@ pub(super) async fn snapshot_open_windows() -> HashMap<String, String> {
 }
 
 /// Spawn the Hyprland event listener, forwarding each lifecycle event on `tx`.
-pub(super) fn spawn_window_listener(
-    tx: mpsc::Sender<WindowEvent>,
-) -> tokio::task::JoinHandle<()> {
+pub(super) fn spawn_window_listener(tx: mpsc::Sender<WindowEvent>) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut listener = hyprland::event_listener::AsyncEventListener::new();
 

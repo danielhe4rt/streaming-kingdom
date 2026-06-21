@@ -2,9 +2,9 @@
 
 use std::sync::Arc;
 
-use axum::routing::{get, post};
 use axum::Router;
-use tokio::sync::{broadcast, mpsc, Mutex};
+use axum::routing::{get, post};
+use tokio::sync::{Mutex, broadcast, mpsc};
 
 use crate::application::LivepixConfig;
 use crate::domain::StreamEvent;

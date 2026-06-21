@@ -25,7 +25,10 @@ impl OverlayId {
     }];
 
     pub fn def(self) -> &'static OverlayDef {
-        OverlayId::ALL.iter().find(|o| o.id == self).unwrap()
+        OverlayId::ALL
+            .iter()
+            .find(|o| o.id == self)
+            .expect("every OverlayId has a matching OverlayDef in OverlayId::ALL")
     }
 }
 

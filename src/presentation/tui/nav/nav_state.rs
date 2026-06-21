@@ -1,6 +1,6 @@
 //! The whole nav state and the pure transitions over it.
 
-use super::{default_sub, sub_items, Section, SubItem};
+use super::{Section, SubItem, default_sub, sub_items};
 
 /// The whole nav state: which section is active and the *remembered* sub-item
 /// per section, plus the sidebar cursor. Switching sections restores that

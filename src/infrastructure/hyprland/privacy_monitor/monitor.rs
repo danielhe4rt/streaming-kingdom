@@ -9,7 +9,7 @@ use crate::infrastructure::obs;
 
 use super::blur_state::{apply_blur_transition, teardown_blur};
 use super::messages::{PrivacyCommand, PrivacyStatus};
-use super::window_events::{snapshot_open_windows, spawn_window_listener, WindowEvent};
+use super::window_events::{WindowEvent, snapshot_open_windows, spawn_window_listener};
 
 /// Spawns the privacy monitor as a tokio task.
 ///

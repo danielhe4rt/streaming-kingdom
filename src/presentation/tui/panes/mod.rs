@@ -24,7 +24,9 @@ pub fn draw(frame: &mut Frame, app: &AppState, tui: &TuiState) {
     let outer = Block::default()
         .title(Line::from(Span::styled(
             " ♥ streams-toolkit ",
-            Style::default().fg(COLOR_ACCENT).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(COLOR_ACCENT)
+                .add_modifier(Modifier::BOLD),
         )))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)

@@ -85,11 +85,16 @@ pub(super) fn parse_event(sub_type: &str, event: &Value) -> Option<StreamEvent> 
     }
 }
 
-/// Convert Twitch tier string ("1000", "2000", "3000") to `SubTier`.
+/// Convert a Twitch sub-plan string to `SubTier`.
+///
+/// EventSub sends numeric tiers (`"1000"`/`"2000"`/`"3000"`), where Prime is
+/// reported as `"1000"`; USERNOTICE / Helix payloads instead label it `"Prime"`,
+/// which we map explicitly. Anything unrecognised falls back to Tier 1.
 fn parse_tier(tier: &str) -> SubTier {
     match tier {
         "2000" => SubTier::Tier2,
         "3000" => SubTier::Tier3,
+        "Prime" | "prime" => SubTier::Prime,
         _ => SubTier::Tier1,
     }
 }

@@ -14,7 +14,9 @@ fn full_snapshot_maps_to_roster() {
               "serverMute": false, "serverDeaf": true }
         ]
     }"#;
-    let roster = serde_json::from_str::<BridgeSnapshot>(json).unwrap().into_roster();
+    let roster = serde_json::from_str::<BridgeSnapshot>(json)
+        .unwrap()
+        .into_roster();
 
     assert_eq!(roster.channel_id.as_deref(), Some("123"));
     assert_eq!(roster.channel_name.as_deref(), Some("coworking"));
@@ -29,14 +31,18 @@ fn full_snapshot_maps_to_roster() {
 
 #[test]
 fn empty_snapshot_is_a_cleared_roster() {
-    let roster = serde_json::from_str::<BridgeSnapshot>("{}").unwrap().into_roster();
+    let roster = serde_json::from_str::<BridgeSnapshot>("{}")
+        .unwrap()
+        .into_roster();
     assert_eq!(roster, VoiceRoster::default());
 }
 
 #[test]
 fn member_defaults_fill_missing_fields() {
     let json = r#"{ "channelId": "1", "members": [ { "userId": "7" } ] }"#;
-    let roster = serde_json::from_str::<BridgeSnapshot>(json).unwrap().into_roster();
+    let roster = serde_json::from_str::<BridgeSnapshot>(json)
+        .unwrap()
+        .into_roster();
     let m = &roster.members[0];
     assert_eq!(m.user_id, "7");
     assert_eq!(m.display_name, "");

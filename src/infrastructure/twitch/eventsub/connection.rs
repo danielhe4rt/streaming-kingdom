@@ -9,11 +9,11 @@ use tokio_tungstenite::tungstenite::Message;
 
 use crate::domain::AppEvent;
 
+use super::EVENTSUB_URL;
 use super::client::TwitchClient;
 use super::error::ClientError;
 use super::handshake::wait_for_welcome;
 use super::message_handler::MessageResult;
-use super::EVENTSUB_URL;
 
 /// Why a single connection's listen loop exited.
 pub(super) enum ReconnectAction {

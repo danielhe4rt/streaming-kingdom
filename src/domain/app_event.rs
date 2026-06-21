@@ -33,8 +33,6 @@ pub enum AppEvent {
     WaybarSpawned,
     WaybarKilled,
     WaybarError(String),
-    AlertsBrowserOpened,
-    AlertsBrowserClosed,
     Info(String),
     Error(String),
 
@@ -43,12 +41,12 @@ pub enum AppEvent {
     LivepixError(String),
 
     // --- Group: Hyprland ---
-    WindowOpened { address: String, title: String },
+    WindowOpened { title: String },
     WindowClosed { address: String },
-    WindowTitleChanged { address: String, title: String },
+    WindowTitleChanged { title: String },
     WorkspaceChanged { name: String },
     MonitorFocused { monitor: String },
-    WindowMoved { address: String, workspace: String },
+    WindowMoved { workspace: String },
 
     // --- Group: Chat ---
     ChatMessage { username: String, text: String },

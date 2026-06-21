@@ -276,16 +276,20 @@ mod tests {
     fn chat_message_seeds_emote_every_third() {
         // seq % 3 == 0 → carries an emote fragment (text + emote).
         let with_emote = chat_message(0);
-        assert!(with_emote
-            .fragments
-            .iter()
-            .any(|f| matches!(f, MessageFragment::Emote { .. })));
+        assert!(
+            with_emote
+                .fragments
+                .iter()
+                .any(|f| matches!(f, MessageFragment::Emote { .. }))
+        );
         // seq % 3 != 0 → text only.
         let text_only = chat_message(1);
-        assert!(text_only
-            .fragments
-            .iter()
-            .all(|f| matches!(f, MessageFragment::Text(_))));
+        assert!(
+            text_only
+                .fragments
+                .iter()
+                .all(|f| matches!(f, MessageFragment::Text(_)))
+        );
     }
 
     #[test]

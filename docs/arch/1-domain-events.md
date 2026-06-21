@@ -86,8 +86,8 @@ Classification of subscription monetization levels. Produced implicitly when con
   │                                  │                        │  stats.record() │
   │                                  │                        │  + log AppEvent │
   │                                  │                        │                 │
-  │                                  │                        │  dispatch_event()
-  │                                  │                        │  broadcasts again
+  │                                  │  (Waybar writer also   │                 │
+  │                                  │   reads the broadcast) │                 │
   │                                  │                        │ ───────────────►│
   │                                  │                        │                 │ writes to
   │                                  │                        │                 │ stream_data.json
@@ -98,7 +98,7 @@ Classification of subscription monetization levels. Produced implicitly when con
 1. **Twitch sends**: raw JSON event with `type: "channel.follow"`, `user_name: "alice"`
 2. **TwitchClient::parse_event()**: `StreamEvent::Follow { username: "alice" }`
 3. **TwitchClient broadcasts**: sends to `broadcast::Sender<StreamEvent>`
-4. **AppState::dispatch_event()**: wraps as `AppEvent::Stream(StreamEvent::Follow {...})`, logs it with timestamp, updates `stats.followers_today += 1`
+4. **TUI run loop (`drain::stream_events`)**: records stats (`stats.followers_today += 1`) and logs `AppEvent::Stream(StreamEvent::Follow {...})` with a timestamp
 5. **Waybar listener** (via `infrastructure::waybar::event_writer`): converts to JSON, writes `stream_data.json` for Waybar display widget
 
 ---
@@ -132,11 +132,10 @@ Classification of subscription monetization levels. Produced implicitly when con
 
 1. **Twitch sends**: `channel.subscription.message` JSON with `tier: "1000"`, `cumulative_months: 6`
 2. **parse_event()**: `StreamEvent::Sub { username: "bob", tier: Tier1, months: 6 }`
-3. **AppState dispatch_event()**: 
-   - Calls `stats.record(&event)` → `stats.subs_today += 1`
-   - Wraps as `AppEvent::Stream(StreamEvent::Sub {...})`
-   - Logs to `event_log` (bounded to `max_events`)
-   - Broadcasts `StreamEvent` on the channel
+3. **TUI run loop (`drain::stream_events`)**:
+   - Calls `stats.record(&ev)` → `stats.subs_today += 1`
+   - Logs `AppEvent::Stream(StreamEvent::Sub {...})` to `event_log` (bounded to `max_events`)
+   - Pushes a TUI highlight for the subscriber
 4. **Presentation layer** (TUI): subscribes to the broadcast, receives the event, renders a highlight entry with the subscriber's name and a fade-out animation
 
 ---
@@ -206,12 +205,11 @@ Raid events from the EventSub `channel.raid` subscription type:
 All `StreamEvent`s flow through this pattern once created:
 
 1. **Producer** (Twitch EventSub, Livepix webhook) creates the variant
-2. **TwitchClient or webhook handler** broadcasts/sends to AppState
-3. **AppState::dispatch_event()** (called by main.rs or infrastructure layer):
-   - Calls `stats.record(event)` to update counters
-   - Wraps as `AppEvent::Stream(event)` and logs with timestamp
-   - Broadcasts the `StreamEvent` on the broadcast channel
-   - Subscribers receive it: Waybar writer, TUI presentation, TTS processor, etc.
+2. **The producer broadcasts it** on the `event_tx` broadcast channel
+3. **Each consumer receives it independently** (broadcast receivers created at startup):
+   - The **TUI run loop** (`drain::stream_events`) records stats via `stats.record(&ev)` and logs `AppEvent::Stream(ev)` with a timestamp
+   - The **Waybar writer** converts it to JSON for the bottom-bar widget
+   - The **Overlay feed** forwards it to browser-source overlays over SSE
 
 Each consumer (presentation, waybar, elevenlabs) is independent and non-blocking: they pull from broadcast receivers that were created at startup.
 

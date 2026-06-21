@@ -1,6 +1,6 @@
 //! Tests for emote-span splicing and the fragmented-body constructor.
 
-use crate::domain::chat::{emote_cdn_url, ChatMessage, EmoteSpan, MessageFragment};
+use crate::domain::chat::{ChatMessage, EmoteSpan, MessageFragment, emote_cdn_url};
 
 fn text(s: &str) -> MessageFragment {
     MessageFragment::Text(s.into())

@@ -38,7 +38,8 @@ impl BadgeMap {
         channel: impl IntoIterator<Item = (String, String, String)>,
     ) -> Self {
         let collect = |it: &mut dyn Iterator<Item = (String, String, String)>| {
-            it.map(|(set, version, url)| ((set, version), url)).collect()
+            it.map(|(set, version, url)| ((set, version), url))
+                .collect()
         };
         Self {
             global: collect(&mut global.into_iter()),
@@ -67,9 +68,7 @@ impl BadgeMap {
             .map(|badge| ChatBadge {
                 set: badge.set.clone(),
                 version: badge.version.clone(),
-                url: self
-                    .resolve(&badge.set, &badge.version)
-                    .map(str::to_string),
+                url: self.resolve(&badge.set, &badge.version).map(str::to_string),
             })
             .collect()
     }
@@ -244,7 +243,10 @@ mod tests {
             ChatBadge::new("glitchcon2020", "1"),
         ]);
 
-        assert_eq!(resolved[0].url.as_deref(), Some("https://cdn/global/mod.png"));
+        assert_eq!(
+            resolved[0].url.as_deref(),
+            Some("https://cdn/global/mod.png")
+        );
         assert_eq!(
             resolved[1].url.as_deref(),
             Some("https://cdn/channel/sub12.png")

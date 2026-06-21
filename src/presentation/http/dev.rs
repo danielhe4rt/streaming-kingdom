@@ -41,7 +41,11 @@ fn kind_from_str(s: &str) -> Option<SyntheticKind> {
 /// TUI Test events pane never drift.
 pub async fn event(Path(kind): Path<String>, State(state): State<OverlayState>) -> Response {
     let Some(sk) = kind_from_str(&kind) else {
-        return (StatusCode::BAD_REQUEST, format!("unknown event kind: {kind}")).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            format!("unknown event kind: {kind}"),
+        )
+            .into_response();
     };
     match synthetic::stream_event(sk, synthetic::next_seq()) {
         // Send error just means no Overlay is connected yet — harmless.
@@ -49,7 +53,11 @@ pub async fn event(Path(kind): Path<String>, State(state): State<OverlayState>) 
             let _ = state.event_tx.send(ev);
             (StatusCode::OK, format!("fired {kind}")).into_response()
         }
-        None => (StatusCode::BAD_REQUEST, format!("not a stream event: {kind}")).into_response(),
+        None => (
+            StatusCode::BAD_REQUEST,
+            format!("not a stream event: {kind}"),
+        )
+            .into_response(),
     }
 }
 

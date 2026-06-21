@@ -10,9 +10,9 @@ The unified event log that captures all system activity into a single, serializa
 
 ### `AppEvent` (enum)
 
-The core event type. Represents any noteworthy occurrence in the system. Seven groups of variants:
+The core event type. Represents any noteworthy occurrence in the system. Grouped variants:
 
-- **`Stream(StreamEvent)`** — a wrapped stream event (follow, sub, donation, cheer, raid, etc.). Created by infrastructure when Twitch EventSub sends an event; routed through application state.
+- **`Stream(StreamEvent)`** — a wrapped stream event (follow, sub, donation, cheer, raid, etc.). Created by the TUI run loop as it drains the `StreamEvent` broadcast (see Flow 1).
 - **`PrivacyBlurEnabled { title }`** — privacy blur was activated with a given window title. Created by privacy feature.
 - **`PrivacyBlurDisabled`** — privacy blur deactivated. Created by privacy feature.
 - **`PrivacyStarted`** — privacy monitoring started. Created by privacy feature.
@@ -20,18 +20,17 @@ The core event type. Represents any noteworthy occurrence in the system. Seven g
 - **`PrivacyError(msg)`** — privacy feature failed with an error message. Created by privacy feature on failure.
 - **`FeatureToggled { feature, enabled }`** — a feature (Waybar, Alerts, Livepix, etc.) was toggled on/off. Created by application state when a command is applied.
 - **`WaybarSpawned`**, **`WaybarKilled`**, **`WaybarError(msg)`** — Waybar process lifecycle. Created by Waybar integration.
-- **`AlertsBrowserOpened`**, **`AlertsBrowserClosed`** — alerts browser window opened/closed. Created by alerts feature.
 - **`Info(msg)`**, **`Error(msg)`** — generic diagnostic messages from any subsystem. Created widely: infrastructure (Twitch, Hyprland, etc.), features (TTS), application.
 - **`LivepixInfo(msg)`**, **`LivepixError(msg)`** — Livepix-specific messages. Created by Livepix integration.
-- **`WindowOpened { address, title }`**, **`WindowClosed { address }`**, **`WindowTitleChanged { address, title }`** — Hyprland window lifecycle. Created by Hyprland event monitor.
+- **`WindowOpened { title }`**, **`WindowClosed { address }`**, **`WindowTitleChanged { title }`** — Hyprland window lifecycle. Created by Hyprland event monitor. (Only `WindowClosed` carries the window `address`, which it renders truncated; the others log just the title.)
 - **`WorkspaceChanged { name }`** — Hyprland workspace switched. Created by Hyprland event monitor.
 - **`MonitorFocused { monitor }`** — Hyprland monitor focus changed. Created by Hyprland event monitor.
-- **`WindowMoved { address, workspace }`** — Hyprland window moved to workspace. Created by Hyprland event monitor.
+- **`WindowMoved { workspace }`** — Hyprland window moved to a workspace. Created by Hyprland event monitor.
 - **`ChatMessage { username, text }`** — IRC chat message received. Created by Twitch IRC handler.
 
 ### `EventGroup` (enum)
 
-Categorical bucket for filtering the event log in the TUI. Seven possible values: `Stream`, `Privacy`, `System`, `Hyprland`, `Livepix`, `Chat`. Used for filtering which event types appear in the TUI event log pane.
+Categorical bucket for filtering the event log in the TUI. Six possible values: `Stream`, `Privacy`, `System`, `Hyprland`, `Livepix`, `Chat`. Used for filtering which event types appear in the TUI event log pane.
 
 ### `AppEventEntry` (struct)
 
@@ -46,37 +45,33 @@ Created by `AppState::log_event()` when any event is recorded.
 ### Flow 1: Incoming Twitch Stream Event → App Event Log
 
 ```
-INFRASTRUCTURE                         APPLICATION STATE                    PRESENTATION
-      │                                      │                                    │
-      │ StreamEvent arrives from EventSub    │                                    │
-      │ (e.g., Follow)                       │                                    │
-      │ ──────────────────────────────────►  │                                    │
-      │                                      │ dispatch_event()                  │
-      │                                      │  - record stats                   │
-      │                                      │  - create AppEvent::Stream(...)   │
-      │                                      │  - push to event_log              │
-      │                                      │  - broadcast StreamEvent to       │
-      │                                      │    feature subscribers            │
-      │                                      │                                    │
-      │                                      │    TUI reads app.event_log        │
-      │                                      │    (reversed order)               │
-      │                                      │ ──────────────────────────────►  │
-      │                                      │                                    │ render_event_log()
-      │                                      │                                    │  - filter by EventGroup
-      │                                      │                                    │  - format with elapsed
-      │                                      │                                    │  - scroll-able pane
-      │                                      │                                    │
+INFRASTRUCTURE                BROADCAST CHANNEL            PRESENTATION (TUI run loop)
+      │                              │                              │
+      │ StreamEvent arrives          │                              │
+      │ from EventSub (e.g. Follow)  │                              │
+      │ ───────────────────────────► │ event_tx.send(StreamEvent)   │
+      │                              │ ───────────────────────────► │
+      │                              │                              │ drain::stream_events()
+      │                              │                              │  - app.stats.record(&ev)
+      │                              │                              │  - app.log_event(
+      │                              │                              │      AppEvent::Stream(ev))
+      │                              │                              │  - maybe push TUI highlight
+      │                              │                              │
+      │                              │  (Waybar writer + Overlay    │ render_event_log()
+      │                              │   feed consume the same      │  - filter by EventGroup
+      │                              │   broadcast independently)   │  - format with elapsed
+      │                              │                              │  - scroll-able pane
 ```
 
 **Code flow:**
-1. Infrastructure `twitch/eventsub.rs` parses an incoming Twitch event, creates a `StreamEvent`.
-2. Sends via `twitch_event_tx` channel to main loop.
-3. Application calls `app.dispatch_event(event)` which:
-   - Updates stats.
-   - Calls `log_event(AppEvent::Stream(event))`.
-   - Broadcasts the raw `StreamEvent` to feature modules (TTS, alerts, etc.).
+1. Infrastructure `twitch/eventsub/message_handler.rs` parses an incoming Twitch event into a `StreamEvent` and sends it on the `event_tx` broadcast.
+2. The broadcast fans out to independent consumers: the TUI run loop, the Waybar writer, and the Overlay feed.
+3. The TUI run loop drains the events in `drain::stream_events()` (`src/presentation/tui/drain.rs`), which:
+   - Updates stats via `app.stats.record(&ev)`.
+   - Logs `app.log_event(AppEvent::Stream(ev))`.
+   - Optionally pushes a TUI highlight.
 4. `log_event()` creates an `AppEventEntry` with current `elapsed` and appends to `app.event_log` (capped at `max_events`).
-5. TUI main loop reads `app.event_log` and renders it in the event-log pane, reversed (newest first), with filters applied per `EventGroup`.
+5. The TUI renders `app.event_log` in the event-log pane, reversed (newest first), with filters applied per `EventGroup`.
 
 ### Flow 2: Feature Command → Feature Toggle Event
 
@@ -132,9 +127,9 @@ INFRASTRUCTURE (e.g., Twitch IRC)     APPLICATION STATE                  EVENT L
 HYPRLAND MONITOR (ipc)                     INFRASTRUCTURE ADAPTER           APP STATE
          │                                         │                           │
          │ Window opened event                     │                           │
-         │ (address, title)                        │                           │
+         │ (window_address, window_title)          │                           │
          │ ────────────────────────────────────►   │                           │
-         │                                         │ parse, create              │
+         │                                         │ keep title, create         │
          │                                         │ AppEvent::WindowOpened     │
          │                                         │ ───────────────────────►  │
          │                                         │                           │ log_event()
@@ -142,8 +137,8 @@ HYPRLAND MONITOR (ipc)                     INFRASTRUCTURE ADAPTER           APP 
 ```
 
 **Code flow:**
-1. Hyprland adapter receives window event from compositor IPC.
-2. Creates `AppEvent::WindowOpened { address, title }` or similar variants.
+1. Hyprland adapter receives a window event from the compositor IPC (the raw event carries the window address and title).
+2. Creates `AppEvent::WindowOpened { title }` or similar variants — the address is dropped for these (only `WindowClosed` keeps it).
 3. Sends via event channel to application state.
 4. Application calls `log_event()` to record it.
 5. May also be filtered and displayed in TUI.

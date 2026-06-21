@@ -13,15 +13,27 @@ use crate::domain::VoiceRoster;
 /// (or first snapshot) yields a single summary line; otherwise per-member
 /// join/leave and — only when `log_speaking` — speaking transitions (these fire
 /// often while talking, so they are off by default).
-pub fn diff_lines(prev: Option<&VoiceRoster>, next: &VoiceRoster, log_speaking: bool) -> Vec<String> {
+pub fn diff_lines(
+    prev: Option<&VoiceRoster>,
+    next: &VoiceRoster,
+    log_speaking: bool,
+) -> Vec<String> {
     let mut lines = Vec::new();
 
     if prev.and_then(|r| r.channel_id.as_deref()) != next.channel_id.as_deref() {
         match &next.channel_id {
             Some(_) => {
-                let names: Vec<&str> = next.members.iter().map(|m| m.display_name.as_str()).collect();
+                let names: Vec<&str> = next
+                    .members
+                    .iter()
+                    .map(|m| m.display_name.as_str())
+                    .collect();
                 let channel = next.channel_name.as_deref().unwrap_or("voice");
-                lines.push(format!("→ in #{channel} ({}): {}", next.members.len(), names.join(", ")));
+                lines.push(format!(
+                    "→ in #{channel} ({}): {}",
+                    next.members.len(),
+                    names.join(", ")
+                ));
             }
             None => lines.push("← left voice (roster cleared)".to_string()),
         }
@@ -45,7 +57,11 @@ pub fn diff_lines(prev: Option<&VoiceRoster>, next: &VoiceRoster, log_speaking: 
     }
     if log_speaking {
         for m in &next.members {
-            let was_speaking = prev.members.iter().find(|p| p.user_id == m.user_id).is_some_and(|p| p.speaking);
+            let was_speaking = prev
+                .members
+                .iter()
+                .find(|p| p.user_id == m.user_id)
+                .is_some_and(|p| p.speaking);
             if m.speaking && !was_speaking {
                 lines.push(format!("🎤 {} speaking", m.display_name));
             } else if !m.speaking && was_speaking {

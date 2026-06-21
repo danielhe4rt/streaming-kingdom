@@ -21,7 +21,9 @@ async fn snapshot_over_ws_publishes_roster() {
         .unwrap();
     let snapshot = r#"{"channelId":"99","channelName":"general",
         "members":[{"userId":"5","displayName":"ferris","speaking":true}]}"#;
-    ws.send(Message::Text(snapshot.to_owned().into())).await.unwrap();
+    ws.send(Message::Text(snapshot.to_owned().into()))
+        .await
+        .unwrap();
 
     // Bounded wait so a regression fails instead of hanging the suite.
     tokio::time::timeout(std::time::Duration::from_secs(2), rx.changed())
@@ -39,6 +41,9 @@ async fn snapshot_over_ws_publishes_roster() {
     while let Ok(DiscordStatus::Activity(line)) = status_rx.try_recv() {
         lines.push(line);
     }
-    assert!(lines.iter().any(|l| l.contains("reader connected")), "got: {lines:?}");
+    assert!(
+        lines.iter().any(|l| l.contains("reader connected")),
+        "got: {lines:?}"
+    );
     assert!(lines.iter().any(|l| l.contains("ferris")), "got: {lines:?}");
 }

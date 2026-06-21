@@ -2,10 +2,10 @@
 
 use serde_json::Value;
 
+use super::HELIX_SUBSCRIPTIONS_URL;
 use super::client::TwitchClient;
 use super::error::ClientError;
 use super::subscription_catalog::SubDef;
-use super::HELIX_SUBSCRIPTIONS_URL;
 
 impl TwitchClient {
     /// Send a single EventSub subscription request, returning the HTTP status.

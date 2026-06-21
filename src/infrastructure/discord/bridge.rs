@@ -40,7 +40,10 @@ pub async fn serve(
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let listener = TcpListener::bind(addr).await?;
     tracing::info!("discord bridge: listening on ws://{addr}");
-    log(status_tx, format!("ingress listening on :{port}, waiting for Vesktop reader…"));
+    log(
+        status_tx,
+        format!("ingress listening on :{port}, waiting for Vesktop reader…"),
+    );
     accept_loop(listener, log_speaking, status_tx, roster_tx).await
 }
 

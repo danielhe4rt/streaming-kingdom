@@ -1,6 +1,6 @@
 //! The enriched `ChatMessage` value and its text-only shaping path.
 
-use super::{ChatBadge, MessageFragment, DEFAULT_CHAT_COLOR};
+use super::{ChatBadge, DEFAULT_CHAT_COLOR, MessageFragment};
 
 /// One user message received from a Twitch IRC channel, enriched for parity
 /// rendering on the Coworking Overlay.
@@ -82,14 +82,22 @@ mod tests {
 
     #[test]
     fn from_text_wraps_body_in_single_text_fragment() {
-        let msg =
-            ChatMessage::from_text("abc-123", "danielhe4rt", Some("#FF7F50"), "rustlang", "hello world");
+        let msg = ChatMessage::from_text(
+            "abc-123",
+            "danielhe4rt",
+            Some("#FF7F50"),
+            "rustlang",
+            "hello world",
+        );
 
         assert_eq!(msg.msg_id, "abc-123");
         assert_eq!(msg.username, "danielhe4rt");
         assert_eq!(msg.channel, "rustlang");
         assert_eq!(msg.color, "#FF7F50");
-        assert_eq!(msg.fragments, vec![MessageFragment::Text("hello world".into())]);
+        assert_eq!(
+            msg.fragments,
+            vec![MessageFragment::Text("hello world".into())]
+        );
     }
 
     #[test]

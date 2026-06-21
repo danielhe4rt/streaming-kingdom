@@ -18,7 +18,11 @@ pub fn draw_chat(frame: &mut Frame, area: Rect, tui: &TuiState) {
     let title = if tui.twitch_chat.channel.is_empty() {
         "Live Chat".to_string()
     } else {
-        let status = if tui.twitch_chat.connected { "●" } else { "○" };
+        let status = if tui.twitch_chat.connected {
+            "●"
+        } else {
+            "○"
+        };
         format!("Live Chat #{} {status}", tui.twitch_chat.channel)
     };
 
@@ -121,7 +125,9 @@ fn event_log_block(tui: &TuiState) -> Block<'static> {
 
     let mut title_spans: Vec<Span> = vec![Span::styled(
         " Event Log ",
-        Style::default().fg(COLOR_ACCENT).add_modifier(Modifier::BOLD),
+        Style::default()
+            .fg(COLOR_ACCENT)
+            .add_modifier(Modifier::BOLD),
     )];
     for (label, active) in filter_labels {
         let style = if active { on_style } else { off_style };

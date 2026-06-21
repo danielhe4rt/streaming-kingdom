@@ -15,7 +15,6 @@ pub fn spawn(tx: mpsc::Sender<AppEvent>) -> tokio::task::JoinHandle<()> {
             Box::pin(async move {
                 let _ = tx
                     .send(AppEvent::WindowOpened {
-                        address: data.window_address.to_string(),
                         title: data.window_title,
                     })
                     .await;
@@ -41,10 +40,7 @@ pub fn spawn(tx: mpsc::Sender<AppEvent>) -> tokio::task::JoinHandle<()> {
             let tx = tx_title.clone();
             Box::pin(async move {
                 let _ = tx
-                    .send(AppEvent::WindowTitleChanged {
-                        address: data.address.to_string(),
-                        title: data.title,
-                    })
+                    .send(AppEvent::WindowTitleChanged { title: data.title })
                     .await;
             })
         });
@@ -82,7 +78,6 @@ pub fn spawn(tx: mpsc::Sender<AppEvent>) -> tokio::task::JoinHandle<()> {
             Box::pin(async move {
                 let _ = tx
                     .send(AppEvent::WindowMoved {
-                        address: data.window_address.to_string(),
                         workspace: data.workspace_name.to_string(),
                     })
                     .await;

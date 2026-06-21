@@ -4,9 +4,9 @@ use serde_json::Value;
 
 use crate::domain::AppEvent;
 
+use super::TOKEN_REFRESH_URL;
 use super::client::TwitchClient;
 use super::error::ClientError;
-use super::TOKEN_REFRESH_URL;
 
 impl TwitchClient {
     /// Attempt to refresh the OAuth token using the refresh_token.

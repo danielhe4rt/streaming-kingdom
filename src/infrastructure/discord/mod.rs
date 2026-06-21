@@ -31,7 +31,9 @@ pub enum DiscordCommand {
 pub enum DiscordStatus {
     Stopped,
     /// Listening + injecting (channel name once a roster snapshot has arrived).
-    Running { channel: Option<String> },
+    Running {
+        channel: Option<String>,
+    },
     /// A debugging line for the TUI event log (connect/disconnect, channel hop,
     /// joins/leaves, speaking) — does not change the Services-row state.
     Activity(String),
@@ -80,7 +82,9 @@ async fn run_session(
     voice_roster_tx: &watch::Sender<Option<VoiceRoster>>,
     config: &DiscordConfig,
 ) {
-    let _ = status_tx.send(DiscordStatus::Running { channel: None }).await;
+    let _ = status_tx
+        .send(DiscordStatus::Running { channel: None })
+        .await;
 
     tokio::select! {
         result = session(config, status_tx, voice_roster_tx) => {

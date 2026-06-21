@@ -42,7 +42,13 @@ pub fn draw_topbar(frame: &mut Frame, area: Rect, app: &AppState, tui: &TuiState
     frame.render_widget(Paragraph::new(Line::from(tabs)), tabs_area);
 
     // Right: channel + key service health dots, always visible.
-    let plain = |on: bool| if on { ("●", COLOR_CONNECTED) } else { ("○", COLOR_INACTIVE) };
+    let plain = |on: bool| {
+        if on {
+            ("●", COLOR_CONNECTED)
+        } else {
+            ("○", COLOR_INACTIVE)
+        }
+    };
     let channel = if tui.twitch_chat.channel.is_empty() {
         "—".to_string()
     } else {
@@ -120,7 +126,9 @@ pub fn draw_sidebar(frame: &mut Frame, area: Rect, app: &AppState, tui: &TuiStat
         let mut spans = vec![Span::styled(marker, Style::default().fg(COLOR_PRIMARY))];
         // Live status dot for Service/Overlay items (keeps labels aligned).
         match sub_item_dot(item, app, tui) {
-            Some((dot, color)) => spans.push(Span::styled(format!("{dot} "), Style::default().fg(color))),
+            Some((dot, color)) => {
+                spans.push(Span::styled(format!("{dot} "), Style::default().fg(color)))
+            }
             None => spans.push(Span::raw("  ")),
         }
         spans.push(Span::styled(sub_label_with_tag(item), style));
@@ -150,8 +158,11 @@ fn sub_item_dot(item: SubItem, app: &AppState, tui: &TuiState) -> Option<(&'stat
 /// Status bar with context-aware key hints.
 pub fn draw_status_bar(frame: &mut Frame, area: Rect, app: &AppState) {
     if let Some(msg) = &app.status_message {
-        let bar = Paragraph::new(format!(" {msg}"))
-            .style(Style::default().fg(COLOR_ERROR).add_modifier(Modifier::BOLD));
+        let bar = Paragraph::new(format!(" {msg}")).style(
+            Style::default()
+                .fg(COLOR_ERROR)
+                .add_modifier(Modifier::BOLD),
+        );
         frame.render_widget(bar, area);
     } else {
         let help = Line::from(vec![

@@ -32,9 +32,7 @@ const FORMAT: &str = "{{status}}|{{title}}|{{artist}}|{{album}}|{{mpris:artUrl}}
 /// Spawn the media-player observer. While Spotify is Playing/Paused it publishes
 /// `Some(NowPlaying)` (carrying that status); when the player is Stopped, absent,
 /// or `playerctl` exits, it publishes `None`. Only publishes on change (dedupe).
-pub fn spawn(
-    now_playing_tx: watch::Sender<Option<NowPlaying>>,
-) -> tokio::task::JoinHandle<()> {
+pub fn spawn(now_playing_tx: watch::Sender<Option<NowPlaying>>) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         // Last value we sent, so we only push to the watch on a real change.
         let mut last_sent: Option<NowPlaying> = None;
@@ -73,7 +71,9 @@ pub fn spawn(
                 }
             };
 
-            tracing::info!("media_player observer attached to playerctl --follow -p spotify metadata");
+            tracing::info!(
+                "media_player observer attached to playerctl --follow -p spotify metadata"
+            );
 
             let mut lines = BufReader::new(stdout).lines();
             loop {
@@ -201,8 +201,8 @@ mod tests {
 
     #[test]
     fn empty_art_url_becomes_none() {
-        let np = parse_line("Playing|Song|Artist|Album|")
-            .expect("line with empty artUrl should parse");
+        let np =
+            parse_line("Playing|Song|Artist|Album|").expect("line with empty artUrl should parse");
         assert_eq!(np.art_url, None);
     }
 

@@ -113,19 +113,6 @@ impl AppState {
         self.now_playing_tx.subscribe()
     }
 
-    /// Subscribe to the ambient voice-roster state (Overlay Feed).
-    pub fn subscribe_voice_roster(&self) -> watch::Receiver<Option<VoiceRoster>> {
-        self.voice_roster_tx.subscribe()
-    }
-
-    /// Broadcast a stream event and update stats.
-    pub fn dispatch_event(&mut self, event: StreamEvent) {
-        self.stats.record(&event);
-        self.log_event(AppEvent::Stream(event.clone()));
-        // Ignore send error – means no active receivers yet.
-        let _ = self.event_tx.send(event);
-    }
-
     /// Log a unified event into the event log with timestamp.
     pub fn log_event(&mut self, event: AppEvent) {
         let elapsed = self.started_at.elapsed();

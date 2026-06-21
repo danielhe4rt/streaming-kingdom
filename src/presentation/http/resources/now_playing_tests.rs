@@ -47,8 +47,7 @@ fn now_playing_maps_paused_status() {
 
 #[test]
 fn now_playing_cleared_is_stopped_and_empty() {
-    let value: serde_json::Value =
-        serde_json::to_value(FeedEvent::now_playing_cleared()).unwrap();
+    let value: serde_json::Value = serde_json::to_value(FeedEvent::now_playing_cleared()).unwrap();
 
     assert_eq!(value["kind"], "nowPlaying");
     assert_eq!(value["status"], "stopped");

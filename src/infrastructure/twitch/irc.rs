@@ -134,7 +134,9 @@ impl ChatClient {
 /// are captured from the tags and resolved to CDN urls against the Helix
 /// [`BadgeMap`] (M2).
 fn enrich_privmsg(msg: PrivmsgMessage, badge_map: &BadgeMap) -> ChatMessage {
-    let color = msg.name_color.map(|c| format!("#{:02X}{:02X}{:02X}", c.r, c.g, c.b));
+    let color = msg
+        .name_color
+        .map(|c| format!("#{:02X}{:02X}{:02X}", c.r, c.g, c.b));
 
     // twitch-irc already parsed the `badges` tag into set/version pairs; lift
     // them into the domain type, then resolve their urls against the map.
